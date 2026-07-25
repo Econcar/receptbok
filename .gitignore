@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+# Skannerutdata / felsökningsdumpar
+scanner/.cache/
+tmp/
+*.local.json
+
+# OS / Google Drive
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+~$*

@@ -1,0 +1,16 @@
+{
+  "name": "leasing-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Skannar svenska leasingerbjudanden och flaggar bra priser mot en baslinje.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node scripts/check-syntax.mjs",
+    "test": "npm run check && node --test \"tests/*.test.mjs\"",
+    "scan": "node scanner/run.mjs",
+    "predeploy": "node scripts/predeploy.mjs"
+  }
+}

@@ -1,0 +1,92 @@
+:root {
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --line: #334155;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --good: #4ade80;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1rem 3rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.topbar { padding: 1.5rem 0 1rem; }
+.topbar h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.tagline { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
+
+.filters {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.filters input,
+.filters select {
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.filters input:focus-visible,
+.filters select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.status { margin: 1rem 0 0.5rem; color: var(--muted); font-size: 0.9rem; }
+.status[data-tone="error"] { color: #fca5a5; }
+
+.results { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+
+.card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.card a { color: var(--text); text-decoration: none; font-weight: 600; }
+.card a:hover { color: var(--accent); }
+.card .price { font-size: 1.15rem; font-weight: 700; }
+.card .terms, .card .source { color: var(--muted); font-size: 0.85rem; }
+
+.badge {
+  justify-self: start;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--good);
+  border-radius: 999px;
+}
+
+.footer { margin-top: 2rem; color: var(--muted); font-size: 0.8rem; }
+
+@media (min-width: 720px) {
+  body { max-width: 60rem; margin: 0 auto; }
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Pre-deploy-spärr: git push → Cloudflare deployar direkt, så testerna måste gå igenom här.
+# Aktivera en gång per klon:  git config core.hooksPath .githooks
+node scripts/predeploy.mjs || exit 1
