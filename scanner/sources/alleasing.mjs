@@ -50,12 +50,14 @@ export default {
 
     const out = [];
     let failures = 0;
+    let fallbacks = 0;
     for (const [i, url] of window.entries()) {
       if (i > 0) await sleep(delayMs);
       try {
         const html = await fetchText(url);
         const rows = offerToRawListings(html, url);
         if (!rows.length) failures += 1;
+        else if (rows[0].raw?.via === 'ld+json') fallbacks += 1;
         out.push(...rows);
       } catch (err) {
         failures += 1;
@@ -69,7 +71,19 @@ export default {
     if (failures > window.length * 0.5) {
       throw new Error(`${failures} av ${window.length} sidor gick inte att tolka – formatet har troligen ändrats`);
     }
-    log(`  ${out.length} rader från ${window.length - failures} sidor`);
+
+    const parsed = window.length - failures;
+    log(`  ${out.length} rader från ${parsed} sidor`);
+
+    // Fallbacken räddar raden men tappar löptid och körsträcka. Utan den här
+    // raden syns det bara som att kvoten rader/sidor närmar sig 1,0 – en
+    // formatändring skulle alltså se ut som en lyckad körning.
+    if (fallbacks > 0) {
+      const andel = Math.round((fallbacks / parsed) * 100);
+      log(`  VARNING: ${fallbacks} av ${parsed} sidor (${andel} %) lästes via ld+json-fallbacken`);
+      log('           De raderna saknar löptid och körsträcka. Vid höga tal:'
+        + ' kontrollera om flight-formatet ändrats (se scanner/sources/alleasing.mjs).');
+    }
     return out;
   },
 };
@@ -270,6 +284,9 @@ export function carToRawListings(car, url) {
     includes_tire_storage: car.includesTireStorage,
     segment_uncertain: hasBusinessTerms(car.trim, car.description, car.fullName),
     raw: {
+      // Vilken väg raden kom in. Gör en tyst degradering sökbar i efterhand:
+      // `select count(*) from listings where raw->>'via' = 'ld+json'`.
+      via: 'flight',
       publicId,
       dealerUrl: car.url ?? null,
       dealerExternalId: car.externalId ?? null,

@@ -149,6 +149,25 @@ test('ld+json används när flight-payloaden saknas', () => {
   assert.ok(extractProductLd(html));
 });
 
+test('raden bär med sig vilken väg den kom in', () => {
+  const [flightRow] = offerToRawListings(fixture('alleasing-offer.html'), OFFER_URL);
+  assert.equal(flightRow.raw.via, 'flight');
+
+  const [fallbackRow] = offerToRawListings(fixture('alleasing-offer-endast-ldjson.html'), OFFER_URL);
+  assert.equal(fallbackRow.raw.via, 'ld+json');
+
+  // Det är den här skillnaden räknaren i fetchListings bygger på, och den som
+  // gör en tyst degradering sökbar i databasen efteråt.
+  assert.equal(flightRow.term_months, 36);
+  assert.equal(fallbackRow.term_months, null);
+});
+
+test('varianter behåller via-märkningen genom expansionen', () => {
+  const rows = offerToRawListings(fixture('alleasing-offer-varianter.html'), VARIANT_URL);
+  assert.ok(rows.length > 1);
+  assert.ok(rows.every((r) => r.raw.via === 'flight'));
+});
+
 test('en sida utan både flight och ld+json ger noll rader, inte skräp', () => {
   assert.deepEqual(offerToRawListings('<html><body>Hittades inte</body></html>', OFFER_URL), []);
 });
