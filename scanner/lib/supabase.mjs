@@ -4,7 +4,7 @@
 import { fetchWithRetry } from './http.mjs';
 
 // Kolumner som Postgres räknar ut själv – att skicka dem ger 400.
-const GENERATED_COLUMNS = ['effective_monthly_sek', 'id', 'updated_at'];
+const GENERATED_COLUMNS = ['effective_monthly_sek', 'baseline_eligible', 'id', 'updated_at'];
 
 export function createClient({ url, serviceKey, dryRun = false } = {}) {
   const base = (url ?? process.env.SUPABASE_URL ?? '').replace(/\/$/, '');

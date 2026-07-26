@@ -14,9 +14,11 @@
 // Fas 1 är klar (docs/datakallor.md). Beslutade första adaptrar:
 //   'alleasing' – volym (~10 000 erbjudanden, enumereras via sitemap/offers-*.xml)
 //   'carplus'   – förstahandsdata från leasinggivaren, används som facit mot alleasing
-// Ingen av dem är byggd ännu – det är steg 4 i projektstart.md.
+// Carplus är inte byggd ännu.
 
-const sources = [];
+import alleasing from './alleasing.mjs';
+
+const sources = [alleasing];
 
 export default sources;
 

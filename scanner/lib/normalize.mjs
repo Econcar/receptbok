@@ -178,12 +178,37 @@ export function normalizeListing(raw, { source }) {
     km_per_year: parseKmPerYear(raw.km_per_year),
     residual_sek: parseSek(raw.residual_sek),
     segment: raw.segment === 'foretag' ? 'foretag' : 'privat',
+
+    // Ingen källa har segment som fält – adaptern får flagga på fritext.
+    segment_uncertain: raw.segment_uncertain === true,
+    condition: raw.condition === 'used' || raw.condition === 'new' ? raw.condition : null,
+
+    includes_insurance: toBool(raw.includes_insurance),
+    includes_service: toBool(raw.includes_service),
+    includes_winter_tires: toBool(raw.includes_winter_tires),
+    includes_tire_storage: toBool(raw.includes_tire_storage),
+
+    dealer: raw.dealer ? String(raw.dealer).trim() : null,
+    city: raw.city ? String(raw.city).trim() : null,
+    cash_price_sek: parseSek(raw.cash_price_sek),
+    total_cost_sek: parseSek(raw.total_cost_sek),
+    leasing_factor: Number.isFinite(Number(raw.leasing_factor)) && raw.leasing_factor !== null
+      ? Number(raw.leasing_factor)
+      : null,
+
+    raw: raw.raw ?? null,
   };
 
   // Utan månadspris är annonsen värdelös för prisjämförelsen.
   if (listing.monthly_sek === null) return null;
   listing.effective_monthly_sek = effectiveMonthly(listing);
   return listing;
+}
+
+// null/undefined ska förbli null – "vet inte" är inte samma sak som "nej".
+function toBool(value) {
+  if (value === null || value === undefined) return null;
+  return Boolean(value);
 }
 
 // Ordinitial versal. \b duger inte – det är en ASCII-gräns och skulle dela

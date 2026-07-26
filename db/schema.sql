@@ -30,6 +30,42 @@ create table if not exists public.listings (
 
   -- 'privat' eller 'foretag' – prislogiken skiljer sig (moms/avdrag).
   segment            text not null default 'privat',
+
+  -- Ingen källa anger segment som fält – det står i fritext. Sätts när annonsen
+  -- nämner företagsleasing eller "exkl moms": raden sparas, men hålls utanför
+  -- baslinjen. Se docs/datakallor.md.
+  segment_uncertain  boolean not null default false,
+
+  -- 'new' eller 'used'. Re-leasing har egen prisnivå och ska inte blandas in.
+  condition          text,
+
+  -- Vad som ingår. Två annonser med samma månadspris är inte samma erbjudande
+  -- om den ena innehåller försäkring – utan de här flaggorna ser avskalade
+  -- erbjudanden systematiskt ut som fynd.
+  includes_insurance    boolean,
+  includes_service      boolean,
+  includes_winter_tires boolean,
+  includes_tire_storage boolean,
+
+  -- Kontext från källan. Nyttigt för filtrering och felsökning, inte för baslinjen.
+  dealer             text,
+  city               text,
+  cash_price_sek     numeric(12, 2),
+  total_cost_sek     numeric(12, 2),
+  leasing_factor     numeric(6, 3),
+
+  -- Får raden vara med och forma baslinjen? Samlar fas 1-besluten på ett ställe
+  -- i stället för att sprida dem i vyer och frontend. En rad med kontantinsats
+  -- men utan löptid duger inte: då går kontantinsatsen inte att slå ut, och
+  -- effective_monthly_sek blir för låg.
+  baseline_eligible  boolean generated always as (
+    segment = 'privat'
+    and segment_uncertain = false
+    and condition is distinct from 'used'
+    and monthly_sek is not null
+    and (coalesce(down_payment_sek, 0) = 0 or term_months is not null)
+  ) stored,
+
   raw                jsonb,
 
   first_seen         timestamptz not null default now(),
@@ -40,9 +76,31 @@ create table if not exists public.listings (
   constraint listings_segment_check check (segment in ('privat', 'foretag'))
 );
 
+-- Kolumner som tillkommit efter att schemat först kördes. Separata alters så att
+-- skriptet går att köra om mot en databas som redan har tabellen.
+alter table public.listings add column if not exists segment_uncertain     boolean not null default false;
+alter table public.listings add column if not exists condition             text;
+alter table public.listings add column if not exists includes_insurance    boolean;
+alter table public.listings add column if not exists includes_service      boolean;
+alter table public.listings add column if not exists includes_winter_tires boolean;
+alter table public.listings add column if not exists includes_tire_storage boolean;
+alter table public.listings add column if not exists dealer                text;
+alter table public.listings add column if not exists city                  text;
+alter table public.listings add column if not exists cash_price_sek        numeric(12, 2);
+alter table public.listings add column if not exists total_cost_sek        numeric(12, 2);
+alter table public.listings add column if not exists leasing_factor        numeric(6, 3);
+alter table public.listings add column if not exists baseline_eligible     boolean generated always as (
+  segment = 'privat'
+  and segment_uncertain = false
+  and condition is distinct from 'used'
+  and monthly_sek is not null
+  and (coalesce(down_payment_sek, 0) = 0 or term_months is not null)
+) stored;
+
 create index if not exists listings_brand_model_idx on public.listings (brand, model);
 create index if not exists listings_effective_idx   on public.listings (effective_monthly_sek);
 create index if not exists listings_last_seen_idx   on public.listings (last_seen desc);
+create index if not exists listings_baseline_idx    on public.listings (baseline_eligible) where baseline_eligible;
 
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$
@@ -72,7 +130,8 @@ select
   percentile_cont(0.25) within group (order by effective_monthly_sek)        as p25_effective_sek,
   min(effective_monthly_sek)                                                 as min_effective_sek
 from public.listings
-where effective_monthly_sek is not null
+where baseline_eligible
+  and effective_monthly_sek is not null
   and brand is not null
   and model is not null
   and last_seen > now() - interval '90 days'

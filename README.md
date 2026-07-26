@@ -58,6 +58,8 @@ Skannern (GitHub Actions → Settings → Secrets and variables → Actions):
 | `SUPABASE_SERVICE_ROLE_KEY` | Actions secret | Service-nyckel, **aldrig** i frontend |
 | `SCAN_SOURCES` | valfri | Kommaseparerad lista, tom = alla aktiva |
 | `DRY_RUN` | valfri | `1` = skriv inget till Supabase |
+| `ALLEASING_MAX_OFFERS` | valfri | Sidor per körning (standard 400). Full svep tar flera körningar |
+| `ALLEASING_DELAY_MS` | valfri | Paus mellan hämtningar (standard 1500) |
 
 Frontend (`public/config.js`, publika värden – anon-nyckeln är avsedd att exponeras och
 skyddas av RLS):
@@ -83,7 +85,9 @@ skyddas av RLS):
 - [x] Steg 1–2: repo-struktur, PWA-skal, schema (Cloudflare/Supabase-konton sätts upp manuellt)
 - [x] Steg 3: fas 1 – datakällskartläggning → [docs/datakallor.md](docs/datakallor.md).
       Beslut: börja med `alleasing` (volym) + `carplus` (facit).
-- [ ] Steg 4: första skanner-adaptern (`alleasing`)
+- [x] Steg 4: första skanner-adaptern (`alleasing`) – RSC-flight-payload med ld+json som
+      fallback, ~9 400 erbjudanden via sitemap. Verifierad med `DRY_RUN=1` mot live-sajten.
+- [ ] Steg 4b: `carplus`-adaptern (facit mot alleasing)
 - [ ] Steg 5: frontend lista + filter
 - [ ] Steg 6: deal-score + baslinje
 - [ ] Steg 7: bevakning + notis

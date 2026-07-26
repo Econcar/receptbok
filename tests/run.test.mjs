@@ -83,24 +83,16 @@ test('rader normaliseras innan de skrivs', async () => {
   await runScan({ client, sources: [okSource] });
 
   assert.equal(client.written.length, 1);
-  assert.deepEqual(
-    { ...client.written[0] },
-    {
-      source: 'ok',
-      external_id: '1',
-      url: 'https://exempel.se/1',
-      brand: 'Volvo',
-      model: 'EX30',
-      trim: null,
-      fuel: null,
-      year: null,
-      monthly_sek: 3995,
-      down_payment_sek: null,
-      term_months: 36,
-      km_per_year: null,
-      residual_sek: null,
-      segment: 'privat',
-      effective_monthly_sek: 3995,
-    },
-  );
+  // Bara de fält normaliseringen faktiskt gör något med. Ett deepEqual över hela
+  // raden skulle gå sönder varje gång schemat får en ny kolumn, utan att något
+  // verkligt beteende ändrats.
+  const row = client.written[0];
+  assert.equal(row.source, 'ok');
+  assert.equal(row.external_id, '1');
+  assert.equal(row.brand, 'Volvo', 'märket kanoniseras');
+  assert.equal(row.model, 'EX30', 'märket rensas bort ur modellnamnet');
+  assert.equal(row.monthly_sek, 3995, '"3 995 kr/mån" blir ett tal');
+  assert.equal(row.term_months, 36, '"36 mån" blir ett tal');
+  assert.equal(row.segment, 'privat');
+  assert.equal(row.effective_monthly_sek, 3995);
 });

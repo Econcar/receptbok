@@ -76,10 +76,12 @@ aggregatorernas drift mot.
 4. **Sätt hämtningstakten lågt.** 1,5 s mellan requests (som i `sources/_template.mjs`),
    max ~10 000 sidor per körning fördelat över körningen. Vid 429: backa av,
    inte retry-storm. `lib/http.mjs` gör redan detta.
-5. **Kartlägg XHR-endpointen på alleasing** innan HTML-skrapning väljs. Sajten är Next.js
-   och har sannolikt `/_next/data/<buildId>/…json` bakom erbjudandesidorna. En JSON-väg är
-   både snällare mot källan och mindre skör än HTML-selektorer – men buildId ändras vid
-   varje deploy, så adaptern måste falla tillbaka till HTML.
+5. ~~**Kartlägg XHR-endpointen på alleasing** innan HTML-skrapning väljs.~~ **Gjort
+   2026-07-26 – hypotesen stämde inte.** Sajten är Next.js **App Router**, inte Pages
+   Router: det finns varken `__NEXT_DATA__` eller `/_next/data/<buildId>/…json`, och
+   därmed ingen buildId som kan ändras under fötterna på oss. Data ligger i stället i
+   RSC-flight-payloaden (`self.__next_f.push([1,"…"])`) som ett komplett `car`-objekt.
+   Se [Vad hämtningen faktiskt gav](#vad-hämtningen-faktiskt-gav-2026-07-26).
 
 ## Fältmatchning mot `listings`
 
@@ -91,17 +93,51 @@ aggregatorernas drift mot.
 | `monthly_sek` | ✅ | ✅ | Obligatoriskt – rader utan pris kastas |
 | `down_payment_sek` | ⚠️ via `?deposit=`-param | ❌ (0 kr) | Default 0 om inget anges |
 | `term_months` | ✅ (24/36) | ✅ (36) | |
-| `km_per_year` | ✅ (anges i **mil**) | ✅ (mil) | `parseKmPerYear` gör mil → km |
+| `km_per_year` | ✅ **i kilometer** (`availableDistancesInKm`: 10000, 15000) | ✅ (mil) | Alleasing anger km, **inte** mil – en konvertering här ger 100 000 km/år. `parseKmPerYear` gör mil → km bara för textvärden; tal släpps igenom orörda |
 | `residual_sek` | ❌ | ❌ | **Ingen källa visar restvärde.** Kolumnen blir tom tills vidare |
 | `external_id` | id-suffix ur URL | slug ur URL | Måste vara stabilt över körningar |
 
 Två luckor att vara medveten om när "bra pris"-logiken byggs:
 
 - **Restvärde saknas överallt.** Deal-score får bygga på effektiv månadskostnad enbart.
-- **"Vad som ingår" varierar** (service, försäkring, vinterdäck, däckhotell). Två annonser
-  med samma månadspris är inte samma erbjudande om den ena inkluderar försäkring. Det här
-  är den största kända felkällan i jämförelsen och bör fångas som flaggor på raden innan
-  baslinjen tas i bruk skarpt – annars ser avskalade erbjudanden systematiskt ut som fynd.
+- ~~**"Vad som ingår" varierar**~~ **Löst för alleasing 2026-07-26.** Källan har
+  `includesInsurance`, `includesService`, `includesWinterTire` och `includesTireStorage`
+  som riktiga fält. De ligger nu som kolumner i `listings`. Farhågan står kvar för källor
+  som *inte* har dem – där gäller fortfarande att avskalade erbjudanden systematiskt ser
+  ut som fynd.
+
+## Vad hämtningen faktiskt gav (2026-07-26)
+
+Verifierat mot live-sajten när adaptern byggdes. Det här ersätter gissningarna ovan.
+
+**Hämtningsväg.** RSC-flight-payload (`self.__next_f`), med `<script type="application/ld+json">`
+(`@type: Product`) som fallback. Ld+json bär pris, märke, modell och skick – men inga villkor,
+så en rad därifrån får aldrig löptid eller körsträcka.
+
+**Sitemap.** Indexet har 587 filer, inte 10. Bara `offers-0..9.xml` är erbjudanden
+(~9 400 URL:er totalt); de övriga 576 (`0-0.xml` … `7-43.xml`) är filtersidor som `/fwd`
+och `/awd`. `lastmod` är identiskt för alla rader, precis som kartläggningen misstänkte –
+oanvändbart som "ändrad sedan sist".
+
+**`external_id`.** `car.publicId` är identiskt med URL:ens sista segment i alla stickprov.
+
+**Ett erbjudande är ofta flera.** `availablePrices` listar villkorskombinationer. De skiljer
+sig oftast på **kontantinsats**, inte på löptid: samma Audi A3 fanns som 1895 kr med
+30 000 kr insats, 2195 med 20 000, 2495 med 10 000 och 2795 med 0. Effektiv månadskostnad
+utjämnar dem (1895 + 30000/36 ≈ 2795 + 0), så adaptern behåller den billigaste effektiva
+per löptid + körsträcka och lägger hela listan i `raw`. Fyra rader skulle gett bilen
+fyrdubbel vikt i baslinjen.
+
+**Fälttäckning** (27 rader, blandat tvärsnitt): märke, modell, pris, drivmedel, årsmodell,
+skick, ort och återförsäljare 100 %. Körsträcka 89 %. **Löptid bara 63 %** – det är den
+största kvarvarande luckan. `includesService` 81 %, `leasingFactor` 22 %.
+
+**Segment går inte att läsa av strukturerat.** Det står i fritext. ~7 % av raderna nämner
+företagsleasing eller "exkl moms" och flaggas med `segment_uncertain`; de sparas men hålls
+utanför baslinjen av `baseline_eligible`. Det är en approximation, inte ett facit.
+
+**Blocket nås indirekt.** `car.source` visar underliggande handlare, och en av de vanligaste
+är `blocket` – källan som avfärdades som onåbar i tabellen ovan.
 
 ## Källor
 

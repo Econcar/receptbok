@@ -81,23 +81,53 @@ test('normalizeListing bygger en rad som matchar schemat', () => {
     km_per_year: '1 500 mil/år',
   }, { source: 'exempel' });
 
-  assert.deepEqual(row, {
-    source: 'exempel',
-    external_id: 'abc-1',
-    url: 'https://exempel.se/annons/abc-1',
-    brand: 'Volkswagen',
-    model: 'ID.4 Pro',
-    trim: 'Pro',
-    fuel: 'el',
-    year: 2025,
-    monthly_sek: 3995,
-    down_payment_sek: 36000,
-    term_months: 36,
-    km_per_year: 15000,
-    residual_sek: null,
-    segment: 'privat',
-    effective_monthly_sek: 4995,
-  });
+  // Delmängd, inte hela objektet: nya kolumner i schemat ska inte fälla ett test
+  // om textnormalisering. Att fälten finns täcks av testerna längre ner.
+  assert.equal(row.source, 'exempel');
+  assert.equal(row.external_id, 'abc-1');
+  assert.equal(row.url, 'https://exempel.se/annons/abc-1');
+  assert.equal(row.brand, 'Volkswagen');
+  assert.equal(row.model, 'ID.4 Pro');
+  assert.equal(row.trim, 'Pro');
+  assert.equal(row.fuel, 'el');
+  assert.equal(row.year, 2025);
+  assert.equal(row.monthly_sek, 3995);
+  assert.equal(row.down_payment_sek, 36000);
+  assert.equal(row.term_months, 36);
+  assert.equal(row.km_per_year, 15000, '1 500 mil/år → 15 000 km/år');
+  assert.equal(row.residual_sek, null);
+  assert.equal(row.segment, 'privat');
+  assert.equal(row.effective_monthly_sek, 4995);
+});
+
+test('normalizeListing bär de nya fälten igenom orörda', () => {
+  const row = normalizeListing({
+    external_id: 'x', url: 'https://exempel.se/x', monthly_sek: 2995,
+    condition: 'used', segment_uncertain: true,
+    includes_insurance: true, includes_service: false, includes_tire_storage: null,
+    dealer: 'blocket', city: 'Skövde', leasing_factor: 0.96, total_cost_sek: 158364,
+  }, { source: 'exempel' });
+
+  assert.equal(row.condition, 'used');
+  assert.equal(row.segment_uncertain, true);
+  assert.equal(row.includes_insurance, true);
+  assert.equal(row.includes_service, false);
+  assert.equal(row.includes_tire_storage, null, 'okänt är inte samma sak som nej');
+  assert.equal(row.dealer, 'blocket');
+  assert.equal(row.city, 'Skövde');
+  assert.equal(row.leasing_factor, 0.96);
+  assert.equal(row.total_cost_sek, 158364);
+});
+
+test('condition tar bara de värden schemat känner igen', () => {
+  const make = (condition) => normalizeListing(
+    { external_id: 'x', url: 'https://exempel.se/x', monthly_sek: 1, condition },
+    { source: 's' },
+  );
+  assert.equal(make('new').condition, 'new');
+  assert.equal(make('used').condition, 'used');
+  assert.equal(make('demo').condition, null);
+  assert.equal(make(undefined).condition, null);
 });
 
 test('normalizeListing kastar bort rader utan pris, id eller url', () => {
