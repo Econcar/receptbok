@@ -126,8 +126,11 @@ select
   model,
   segment,
   count(*)                                                                   as sample_size,
-  percentile_cont(0.5) within group (order by effective_monthly_sek)         as median_effective_sek,
-  percentile_cont(0.25) within group (order by effective_monthly_sek)        as p25_effective_sek,
+  -- percentile_cont ger double precision. Castas till numeric här: annars blir
+  -- deal_score-uträkningen i listings_view double, och round(double, int)
+  -- finns inte i Postgres.
+  cast(percentile_cont(0.5) within group (order by effective_monthly_sek) as numeric(12, 2))  as median_effective_sek,
+  cast(percentile_cont(0.25) within group (order by effective_monthly_sek) as numeric(12, 2)) as p25_effective_sek,
   min(effective_monthly_sek)                                                 as min_effective_sek
 from public.listings
 where baseline_eligible
