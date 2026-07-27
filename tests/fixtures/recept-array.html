@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<title>Köttbullar</title>
+<!-- Två separata block, och det ena är en array. Sajter blandar formerna. -->
+<script type="application/ld+json">
+{ "@context": "https://schema.org", "@type": "Organization", "name": "Exempelsajten" }
+</script>
+<script type="application/ld+json">
+[
+  { "@type": "NewsArticle", "headline": "Veckans recept" },
+  {
+    "@type": ["Recipe", "NewsArticle"],
+    "name": "Köttbullar",
+    "recipeYield": "6",
+    "recipeIngredient": ["500 g blandfärs", "1 gul lök", "1 dl ströbröd"],
+    "recipeInstructions": "Blanda, rulla, stek."
+  }
+]
+</script>
+<!-- Trasigt block: ska hoppas över utan att fälla de andra. -->
+<script type="application/ld+json">
+{ "@type": "Recipe", "name": "Trasig", }
+</script>
+</head>
+<body><h1>Köttbullar</h1></body>
+</html>

@@ -1,7 +1,7 @@
 {
-  "name": "Leasingskanner",
-  "short_name": "Leasing",
-  "description": "Svenska leasingerbjudanden – normaliserade och prisbedömda.",
+  "name": "Receptbok",
+  "short_name": "Recept",
+  "description": "Hushållets receptsamling – laga efter dem, handla till dem.",
   "lang": "sv-SE",
   "start_url": "/",
   "scope": "/",

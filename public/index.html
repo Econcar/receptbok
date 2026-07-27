@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Leasingskanner</title>
-<meta name="description" content="Svenska leasingerbjudanden, normaliserade och prisbedömda.">
+<title>Receptbok</title>
+<meta name="description" content="Hushållets receptsamling – laga efter dem, handla till dem.">
 <meta name="theme-color" content="#0f172a">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png">
@@ -13,37 +13,12 @@
 </head>
 <body>
 <header class="topbar">
-  <h1>Leasingskanner</h1>
-  <p class="tagline">Svenska leasingerbjudanden – normaliserade och prisbedömda.</p>
+  <h1>Receptbok</h1>
+  <p class="tagline">Hushållets receptsamling – laga efter dem, handla till dem.</p>
 </header>
 
 <main>
-  <form id="filters" class="filters" autocomplete="off">
-    <label>Sök
-      <input type="search" name="q" placeholder="märke, modell, utrustning">
-    </label>
-    <label>Max kr/mån
-      <input type="number" name="maxMonthly" min="0" step="100" placeholder="4000">
-    </label>
-    <label>Löptid
-      <select name="term">
-        <option value="">alla</option>
-        <option value="24">24 mån</option>
-        <option value="36">36 mån</option>
-        <option value="48">48 mån</option>
-        <option value="60">60 mån</option>
-      </select>
-    </label>
-    <label>Sortering
-      <select name="sort">
-        <option value="effective_monthly_sek">Effektiv månadskostnad</option>
-        <option value="monthly_sek">Månadskostnad</option>
-        <option value="last_seen">Senast sedd</option>
-      </select>
-    </label>
-  </form>
-
-  <p id="status" class="status" role="status">Laddar …</p>
+  <p id="status" class="status" role="status">Kontrollerar …</p>
   <ul id="results" class="results"></ul>
 </main>
 
