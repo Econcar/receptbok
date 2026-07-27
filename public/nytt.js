@@ -268,6 +268,7 @@ async function saveRecipe() {
         raw_text: rad.raw,
         quantity: rad.quantity,
         unit: rad.unit,
+        name: rad.name || null,
         note: rad.note,
       })),
       { returning: 'minimal' },

@@ -28,7 +28,8 @@ Projektet ligger på Google Drive (G:\) där lokala `npm install` är opålitlig
 public/              Statisk frontend (Cloudflare Pages root)
   index.html/app.js    Listsidan: recepten med bild, filtrerade på kategori
   nytt.html/nytt.js    Inmatningssidan: import, översättning, handinmatning
-  session.js           Delat av båda: inloggning, kontorad, hushåll
+  veckan.html/…js      Veckoplanen och inköpslistan som räknas fram ur den
+  session.js           Delat av alla: inloggning, kontorad, hushåll
 functions/api/       Pages Functions, en fil per endpoint
 lib/                 Delad logik: ld+json, HTTP, tolkning, översättning. Inga
                      Node-API:er – koden körs både i Node och på Workers.

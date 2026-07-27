@@ -190,6 +190,61 @@ body {
   text-transform: capitalize;
 }
 
+.sectionhead { margin: 1.75rem 0 0.75rem; font-size: 1.1rem; }
+
+.week {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.day {
+  padding: 0.75rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.day[data-planned="true"] { border-color: var(--accent); }
+.day h3 { margin: 0 0 0.4rem; font-size: 0.8rem; text-transform: uppercase;
+          letter-spacing: 0.04em; color: var(--muted); }
+.day p { margin: 0; }
+.day ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.day li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+
+.shopping { list-style: none; margin: 0; padding: 0; }
+
+.shopping li {
+  padding: 0.15rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.shopping li:last-child { border-bottom: 0; }
+
+.shopping label {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  padding: 0.55rem 0.2rem;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.shopping input[type="checkbox"] {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.shopping label:has(input:checked) { color: var(--muted); text-decoration: line-through; }
+.shopping .source { margin: -0.35rem 0 0.35rem 1.8rem; }
+.addrow { margin-top: 1rem; }
+
 .card {
   display: flex;
   flex-direction: column;

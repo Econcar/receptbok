@@ -149,6 +149,41 @@ begin
   end;
 end $$;
 
+-- Veckoplanen kräver två saker samtidigt: rätt hushåll och ett recept som
+-- tillhör det. Utan den andra kontrollen hade en planrad kunnat peka på ett
+-- recept man inte får läsa, och titeln läckt genom planen.
+do $$
+declare n integer;
+begin
+  insert into public.meal_plan (household_id, recipe_id, date, servings)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', current_date, 4);
+
+  select count(*) into n from public.meal_plan;
+  if n <> 1 then raise exception 'Anna ser % planrader, förväntade 1', n; end if;
+
+  -- Bertils recept i Annas plan: hushållet stämmer, receptet gör det inte.
+  begin
+    insert into public.meal_plan (household_id, recipe_id, date)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b1b1', current_date);
+    raise exception 'Anna kunde planera in Bertils recept – titeln läcker via planen';
+  exception when insufficient_privilege then
+    null; -- rätt beteende
+  end;
+
+  insert into public.shopping_list_items (household_id, name, unit, quantity)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'mjölk', 'l', 1);
+
+  begin
+    insert into public.shopping_list_items (household_id, name)
+    values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'kapad vara');
+    raise exception 'Anna kunde skriva i Bertils inköpslista – RLS läcker';
+  exception when insufficient_privilege then
+    null; -- rätt beteende
+  end;
+end $$;
+
 -- Att skapa ett hushåll är ett eget flöde, och det svåraste i hela schemat:
 -- policyn kräver created_by = auth.uid(), och triggern måste göra skaparen till
 -- ägare i samma andetag. Missas något av det blir användaren utelåst från sitt
@@ -196,6 +231,12 @@ begin
 
   select count(*) into n from public.recipe_tags;
   if n <> 0 then raise exception 'Bertil ser Annas receptkategorier – RLS läcker'; end if;
+
+  select count(*) into n from public.meal_plan;
+  if n <> 0 then raise exception 'Bertil ser Annas veckoplan – RLS läcker'; end if;
+
+  select count(*) into n from public.shopping_list_items;
+  if n <> 0 then raise exception 'Bertil ser Annas inköpslista – RLS läcker'; end if;
 
   -- Bertil är inte ägare i Annas hushåll och ska inte kunna bjuda in sig själv.
   begin

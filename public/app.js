@@ -115,7 +115,7 @@ async function show(client) {
 
 const SELECT = 'recipes?select=id,title,image_url,source_url,source_name,servings,'
   + 'total_time_min,instructions,'
-  + 'recipe_ingredients(id,recipe_id,raw_text,position,quantity,unit,note),'
+  + 'recipe_ingredients(id,recipe_id,raw_text,position,quantity,unit,name,note),'
   + 'recipe_tags(tags(id,name))';
 
 async function fetchRecipes(client) {
@@ -160,6 +160,7 @@ async function reparse(client) {
         raw_text: rad.raw_text,
         quantity: tolkad.quantity,
         unit: tolkad.unit,
+        name: tolkad.name || null,
         note: tolkad.note,
       };
     });
@@ -190,8 +191,13 @@ function renderMeta() {
   // Otolkade rader är inte nödvändigtvis fel – "smör till formen" har ingen
   // mängd och ska inte ha någon. Knappen visas därför bara när det finns
   // rader som tolkningen skulle sätta en mängd på om den kördes.
-  const otolkade = allaIngredienser()
-    .filter((rad) => rad.quantity === null && parseIngredient(rad.raw_text).quantity !== null);
+  // Också rader som saknar vara: namnkolumnen kom med inköpslistan och är tom
+  // på allt som sparades dessförinnan.
+  const otolkade = allaIngredienser().filter((rad) => {
+    const tolkad = parseIngredient(rad.raw_text);
+    return (rad.quantity === null && tolkad.quantity !== null)
+      || (!rad.name && tolkad.name);
+  });
 
   els.reparse.hidden = otolkade.length === 0;
   els.reparse.textContent = `Tolka ${otolkade.length} ingrediensrader`;

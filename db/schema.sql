@@ -96,8 +96,15 @@ create table if not exists public.recipe_ingredients (
   raw_text  text not null,
   quantity  numeric,
   unit      text,
+  -- Varan, utan mängd och tillredning: "vispgrädde" ur "2 dl vispgrädde,
+  -- lättvispad". Det är den inköpslistan grupperar på.
+  name      text,
   note      text
 );
+
+-- Separat alter: tabellen fanns före kolumnen, och create table if not exists
+-- rör inte en tabell som redan finns.
+alter table public.recipe_ingredients add column if not exists name text;
 
 -- Avsiktligt inte unique: att flytta en ingrediens uppåt i listan hade annars
 -- krockat mitt i omnumreringen.
@@ -128,6 +135,49 @@ create table if not exists public.recipe_tags (
 -- För filtreringen: primärnyckeln täcker vägen från recept till kategori,
 -- det här indexet vägen tillbaka.
 create index if not exists recipe_tags_tag_idx on public.recipe_tags (tag_id);
+
+-- Veckoplanen. Samma rätt kan stå två gånger samma dag – lunch och middag –
+-- så dag plus recept är ingen nyckel.
+--
+-- servings är antalet portioner man planerar, inte receptets. Skiljer de sig
+-- skalas mängderna i inköpslistan, och raden flaggas som ungefärlig:
+-- kryddor och tillagningstid följer inte portionsantalet.
+create table if not exists public.meal_plan (
+  id           uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households(id) on delete cascade,
+  recipe_id    uuid not null references public.recipes(id) on delete cascade,
+  date         date not null,
+  servings     integer check (servings is null or servings > 0),
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists meal_plan_household_date_idx
+  on public.meal_plan (household_id, date);
+
+-- Inköpslistan räknas fram ur veckoplanen vid varje visning, så själva
+-- raderna lagras inte. Det som lagras är det som inte går att räkna fram:
+-- vad som redan är avbockat, och det man lagt till för hand.
+--
+-- Nyckeln är varans namn och enhet, samma nyckel som sammanslagningen
+-- använder. Ändras planen försvinner bocken för det som inte längre behövs,
+-- vilket är rätt: har man inte varan i listan har man inte köpt den heller.
+create table if not exists public.shopping_list_items (
+  id           uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households(id) on delete cascade,
+  name         text not null check (length(btrim(name)) > 0),
+  unit         text,
+  quantity     numeric,
+  checked      boolean not null default false,
+  -- 'manual' för det man skrivit in själv, 'plan' för en bock på en uträknad
+  -- rad. Skillnaden avgör om raden ska visas när planen är tom.
+  source       text not null default 'manual' check (source in ('manual', 'plan')),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  unique (household_id, name, unit, source)
+);
+
+create index if not exists shopping_list_household_idx
+  on public.shopping_list_items (household_id);
 
 -- ---------------------------------------------------------------------------
 -- Policy-hjälpare (kräver tabellerna ovan)
@@ -206,6 +256,11 @@ create trigger recipes_touch_updated_at
   before update on public.recipes
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists shopping_list_items_touch_updated_at on public.shopping_list_items;
+create trigger shopping_list_items_touch_updated_at
+  before update on public.shopping_list_items
+  for each row execute function public.touch_updated_at();
+
 -- Utan det här blir den som skapar ett hushåll utelåst från det direkt: bara
 -- ägare får lägga till medlemmar, och ingen är ägare förrän första raden finns.
 create or replace function public.add_creator_as_owner()
@@ -237,6 +292,8 @@ alter table public.recipes            enable row level security;
 alter table public.recipe_ingredients enable row level security;
 alter table public.tags               enable row level security;
 alter table public.recipe_tags        enable row level security;
+alter table public.meal_plan          enable row level security;
+alter table public.shopping_list_items enable row level security;
 
 -- Policyer skrivs om vid varje körning, så skriptet förblir idempotent.
 
@@ -325,6 +382,24 @@ create policy "kategorier följer receptet"
   using (public.is_recipe_in_my_household(recipe_id))
   with check (public.is_recipe_in_my_household(recipe_id));
 
+-- Veckoplanen kräver båda: hushållet man planerar för, och att receptet man
+-- planerar in faktiskt är hushållets. Utan den andra kontrollen hade en rad
+-- kunnat peka på ett recept man inte får läsa, och titeln läckt via planen.
+drop policy if exists "hushållets veckoplan" on public.meal_plan;
+create policy "hushållets veckoplan"
+  on public.meal_plan for all to authenticated
+  using (public.is_household_member(household_id))
+  with check (
+    public.is_household_member(household_id)
+    and public.is_recipe_in_my_household(recipe_id)
+  );
+
+drop policy if exists "hushållets inköpslista" on public.shopping_list_items;
+create policy "hushållets inköpslista"
+  on public.shopping_list_items for all to authenticated
+  using (public.is_household_member(household_id))
+  with check (public.is_household_member(household_id));
+
 -- ---------------------------------------------------------------------------
 -- Rättigheter
 -- ---------------------------------------------------------------------------
@@ -333,10 +408,12 @@ create policy "kategorier följer receptet"
 
 revoke all on public.households, public.household_members,
               public.recipes, public.recipe_ingredients,
-              public.tags, public.recipe_tags from anon;
+              public.tags, public.recipe_tags,
+              public.meal_plan, public.shopping_list_items from anon;
 
 grant select, insert, update, delete
   on public.households, public.household_members,
      public.recipes, public.recipe_ingredients,
-     public.tags, public.recipe_tags
+     public.tags, public.recipe_tags,
+     public.meal_plan, public.shopping_list_items
   to authenticated;
