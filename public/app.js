@@ -39,11 +39,13 @@ const els = {
   meta: document.getElementById('meta'),
 };
 
+let client = null;
 let household = null;
 let recipes = [];
 let activeTag = null;
 let query = '';
 let öppna = 0;
+let senasteHämtning = 0;
 
 registerServiceWorker();
 els.meta.textContent = 'Receptbok · fas 3';
@@ -64,7 +66,8 @@ function showOnly(section) {
 const inbjudan = new URL(location.href).searchParams.get('invite');
 
 async function start() {
-  const { client, user, error } = await startSession();
+  const { client: skapad, user, error } = await startSession();
+  client = skapad;
   if (error) setStatus(`Inloggningen avbröts: ${error}`, 'error');
 
   if (!user) {
@@ -151,6 +154,7 @@ async function fetchRecipes(client) {
   try {
     recipes = await client.rest(`${SELECT}&household_id=eq.${household.id}&order=title.asc`);
     saveRecipes(recipes, household.id);
+    senasteHämtning = Date.now();
     setStatus('Ansluten.', 'ok');
   } catch (err) {
     // Utan nät är den sparade kopian hela poängen med kökläget. Finns ingen
@@ -205,6 +209,23 @@ async function skapaInbjudan(client) {
     els.inviteCreate.disabled = false;
   }
 }
+
+/**
+ * Hämtar om när fliken blir synlig igen, så att det någon annan i hushållet
+ * lagt till syns utan omladdning.
+ *
+ * Tre spärrar, och den mellersta är den viktiga: står receptet utfällt läser
+ * någon det just nu, förmodligen mitt i en deg. En omritning hade fällt ihop
+ * det – och att växla till en timer och tillbaka är precis vad man gör i ett
+ * kök. Färsk data är inte värd det priset.
+ */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!client || !household || öppna > 0) return;
+  if (Date.now() - senasteHämtning < 15_000) return; // Fliksurfande ska inte spamma.
+
+  fetchRecipes(client).catch((err) => setStatus(describe(err), 'error'));
+});
 
 const tagsOf = (recipe) => (recipe.recipe_tags ?? []).map((row) => row.tags).filter(Boolean);
 

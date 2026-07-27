@@ -267,23 +267,29 @@ create temporary table testinbjudan (sort text primary key, token uuid) on commi
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
 
 -- Anna är ägare och får bjuda in. Tre länkar: en giltig, en förbrukad, en utgången.
-insert into testinbjudan (sort, token)
-select 'giltig', token from (
+--
+-- En insert som ska mata en annan insert måste ligga i en CTE. Postgres
+-- tillåter inte en data-modifierande sats som subquery i from.
+with ny as (
   insert into public.household_invites (household_id)
-  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') returning token
-) as ny;
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+  returning token
+)
+insert into testinbjudan (sort, token) select 'giltig', token from ny;
 
-insert into testinbjudan (sort, token)
-select 'förbrukad', token from (
+with ny as (
   insert into public.household_invites (household_id, used_at)
-  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now()) returning token
-) as ny;
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now())
+  returning token
+)
+insert into testinbjudan (sort, token) select 'förbrukad', token from ny;
 
-insert into testinbjudan (sort, token)
-select 'utgången', token from (
+with ny as (
   insert into public.household_invites (household_id, expires_at)
-  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now() - interval '1 day') returning token
-) as ny;
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now() - interval '1 day')
+  returning token
+)
+insert into testinbjudan (sort, token) select 'utgången', token from ny;
 
 -- --- Bertil löser in -------------------------------------------------------
 

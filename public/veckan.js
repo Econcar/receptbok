@@ -36,6 +36,22 @@ let household = null;
 let recipes = [];
 let plan = [];
 let sparade = [];
+let senasteHämtning = 0;
+
+/**
+ * Hämtar om när fliken blir synlig igen. Den gemensamma inköpslistan är
+ * poängen: står två personer i olika gångar och bockar av ska man inte behöva
+ * ladda om för att se att den andra redan tagit mjölken.
+ *
+ * Här finns inget utfällt läge att förstöra, till skillnad från receptlistan.
+ */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!client || !household) return;
+  if (Date.now() - senasteHämtning < 15_000) return;
+
+  ladda().catch((err) => setStatus(describe(err), 'error'));
+});
 
 registerServiceWorker();
 els.meta.textContent = 'Receptbok · fas 5';
@@ -131,6 +147,7 @@ async function ladda() {
     client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`),
   ]);
 
+  senasteHämtning = Date.now();
   fyllRecept();
   renderVeckan();
   renderLista();
