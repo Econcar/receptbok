@@ -1,9 +1,13 @@
 name: Skanna leasingerbjudanden
 
 on:
-  schedule:
-    # Var 6:e timme. GitHub kör i UTC och kan försena körningar vid hög last.
-    - cron: '17 */6 * * *'
+  # Schemat är avstängt. Projektet är på väg att göras om till något annat, och
+  # en cron som fyller databasen med 1 600 rader per dygn av data ingen vill ha
+  # är bara i vägen. Ta bort kommentaren för att starta den igen.
+  #
+  # schedule:
+  #   # Var 6:e timme. GitHub kör i UTC och kan försena körningar vid hög last.
+  #   - cron: '17 */6 * * *'
   workflow_dispatch:
     inputs:
       sources:
@@ -38,4 +42,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SCAN_SOURCES: ${{ github.event.inputs.sources }}
           DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '' }}
+          # Repo-variabler (Settings → Secrets and variables → Actions → Variables).
+          # Tomma värden är ofarliga: adaptern faller tillbaka på sina standardvärden.
+          ALLEASING_MAX_OFFERS: ${{ vars.ALLEASING_MAX_OFFERS }}
+          ALLEASING_DELAY_MS: ${{ vars.ALLEASING_DELAY_MS }}
         run: node scanner/run.mjs

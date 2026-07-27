@@ -58,8 +58,14 @@ Skannern (GitHub Actions → Settings → Secrets and variables → Actions):
 | `SUPABASE_SERVICE_ROLE_KEY` | Actions secret | Service-nyckel, **aldrig** i frontend |
 | `SCAN_SOURCES` | valfri | Kommaseparerad lista, tom = alla aktiva |
 | `DRY_RUN` | valfri | `1` = skriv inget till Supabase |
-| `ALLEASING_MAX_OFFERS` | valfri | Sidor per körning (standard 400). Full svep tar flera körningar |
-| `ALLEASING_DELAY_MS` | valfri | Paus mellan hämtningar (standard 1500) |
+| `ALLEASING_MAX_OFFERS` | Actions **variable** | Sidor per körning (standard 400). Full svep tar flera körningar |
+| `ALLEASING_DELAY_MS` | Actions **variable** | Paus mellan hämtningar (standard 1500) |
+
+De två sista är *variables*, inte *secrets* – de är inte hemliga och ska gå att läsa av.
+Tomma värden är ofarliga; adaptern använder sina standardvärden då.
+
+Den schemalagda körningen är **avstängd** i [scan.yml](.github/workflows/scan.yml) tills det är
+avgjort vad projektet ska bli. Skanningen startas manuellt via `workflow_dispatch`.
 
 Frontend (`public/config.js`, publika värden – anon-nyckeln är avsedd att exponeras och
 skyddas av RLS):
