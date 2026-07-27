@@ -11,6 +11,7 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, startSession,
 } from '/session.js';
 import { matchesQuery } from '/search.js';
+import { parseIngredient } from '/ingredients.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
   saveHousehold, saveRecipes, savedAgo,
@@ -26,6 +27,7 @@ const els = {
   library: document.getElementById('library'),
   householdTitle: document.getElementById('household-title'),
   householdMeta: document.getElementById('household-meta'),
+  reparse: document.getElementById('reparse'),
   search: document.getElementById('search'),
   filters: document.getElementById('filters'),
   results: document.getElementById('results'),
@@ -81,6 +83,8 @@ async function start() {
     renderRecipes();
   });
 
+  els.reparse.addEventListener('click', guard(() => reparse(client)));
+
   await show(client);
 }
 
@@ -110,7 +114,8 @@ async function show(client) {
 }
 
 const SELECT = 'recipes?select=id,title,image_url,source_url,source_name,servings,'
-  + 'total_time_min,instructions,recipe_ingredients(raw_text,position),'
+  + 'total_time_min,instructions,'
+  + 'recipe_ingredients(id,recipe_id,raw_text,position,quantity,unit,note),'
   + 'recipe_tags(tags(id,name))';
 
 async function fetchRecipes(client) {
@@ -134,11 +139,62 @@ async function fetchRecipes(client) {
 
 const tagsOf = (recipe) => (recipe.recipe_tags ?? []).map((row) => row.tags).filter(Boolean);
 
+/**
+ * Kör tolkningen över alla sparade ingrediensrader.
+ *
+ * Går att göra om hur många gånger som helst: raw_text rörs aldrig, bara
+ * mängd, enhet och not skrivs. Blir reglerna bättre trycker man bara igen.
+ */
+async function reparse(client) {
+  const rader = allaIngredienser();
+  setStatus(`Tolkar ${rader.length} ingrediensrader …`);
+  els.reparse.disabled = true;
+
+  try {
+    const uppdaterade = rader.map((rad) => {
+      const tolkad = parseIngredient(rad.raw_text);
+      return {
+        id: rad.id,
+        recipe_id: rad.recipe_id,
+        position: rad.position,
+        raw_text: rad.raw_text,
+        quantity: tolkad.quantity,
+        unit: tolkad.unit,
+        note: tolkad.note,
+      };
+    });
+
+    // Upsert på primärnyckeln: ett anrop i stället för ett per rad.
+    await client.rest('recipe_ingredients?on_conflict=id', {
+      method: 'POST',
+      body: uppdaterade,
+      headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+    });
+
+    const medMängd = uppdaterade.filter((rad) => rad.quantity !== null).length;
+    await fetchRecipes(client);
+    setStatus(`Tolkade ${medMängd} av ${uppdaterade.length} rader. Resten saknar mängd i originalet.`, 'ok');
+  } finally {
+    els.reparse.disabled = false;
+  }
+}
+
+const allaIngredienser = () => recipes.flatMap((recipe) => recipe.recipe_ingredients ?? []);
+
 function renderMeta() {
   const roleName = household.role === 'owner' ? 'ägare' : 'medlem';
   els.householdMeta.textContent = recipes.length === 0
     ? `Du är ${roleName}. Inga recept ännu.`
     : `Du är ${roleName}. ${recipes.length} recept.`;
+
+  // Otolkade rader är inte nödvändigtvis fel – "smör till formen" har ingen
+  // mängd och ska inte ha någon. Knappen visas därför bara när det finns
+  // rader som tolkningen skulle sätta en mängd på om den kördes.
+  const otolkade = allaIngredienser()
+    .filter((rad) => rad.quantity === null && parseIngredient(rad.raw_text).quantity !== null);
+
+  els.reparse.hidden = otolkade.length === 0;
+  els.reparse.textContent = `Tolka ${otolkade.length} ingrediensrader`;
 }
 
 function renderFilters() {

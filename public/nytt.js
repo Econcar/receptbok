@@ -8,6 +8,7 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, startSession,
 } from '/session.js';
 import { looksSwedish } from '/lang.js';
+import { parseIngredients } from '/ingredients.js';
 
 // Förslag, inte en fast lista. Egna kategorier skrivs in i fältet bredvid.
 const FÖRSLAG = [
@@ -256,11 +257,19 @@ async function saveRecipe() {
 
   const ingredients = lines(els.ingredients.value);
   if (ingredients.length) {
-    // raw_text sparas som den står. Mängd och enhet tolkas i fas 4, ur den
-    // här texten – originalet är facit och skrivs aldrig över.
+    // raw_text sparas som den står, tolkningen läggs bredvid. Originalet är
+    // facit och skrivs aldrig över – tolkningen kan därför köras om när
+    // reglerna blir bättre, utan att något importeras om.
     await client.insert(
       'recipe_ingredients',
-      ingredients.map((raw_text, index) => ({ recipe_id: saved.id, position: index + 1, raw_text })),
+      parseIngredients(ingredients).map((rad, index) => ({
+        recipe_id: saved.id,
+        position: index + 1,
+        raw_text: rad.raw,
+        quantity: rad.quantity,
+        unit: rad.unit,
+        note: rad.note,
+      })),
       { returning: 'minimal' },
     );
   }

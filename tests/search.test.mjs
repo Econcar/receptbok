@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { matchesQuery, normalize } from '../public/search.js';
 import {
-  clearRecipes, loadHousehold, loadRecipes, saveHousehold, saveRecipes, savedAgo,
+  clearRecipes, loadHousehold, loadRecipes, saveHousehold, saveRecipes, savedAgo, VERSION,
 } from '../public/store.js';
 
 const RECEPT = {
@@ -117,8 +117,10 @@ test('ett halvt sparat hushåll används inte', () => {
   storage.setItem('receptbok.hushall', 'inte json');
   assert.equal(loadHousehold(storage), null);
 
-  // Utan id går inga recept att slå upp, och då är kopian värdelös.
-  storage.setItem('receptbok.hushall', JSON.stringify({ version: 2, household: { name: 'X' } }));
+  // Utan id går inga recept att slå upp, och då är kopian värdelös. VERSION
+  // importeras i stället för att skrivas som en siffra, annars hade provet
+  // passerat på versionsfelet i stället för på det som testas.
+  storage.setItem('receptbok.hushall', JSON.stringify({ version: VERSION, household: { name: 'X' } }));
   assert.equal(loadHousehold(storage), null);
 });
 

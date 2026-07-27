@@ -14,7 +14,10 @@ const HUSHÅLL = 'receptbok.hushall';
 
 // Höjs när formen på det sparade ändras. En gammal kopia kastas då i stället
 // för att renderas fel – recepten hämtas ändå om så fort det finns nät.
-const VERSION = 2;
+//
+// Exporterad så att testerna följer med när den höjs. Hårdkodad i ett test
+// hade den gjort att provet passerade av fel skäl efter nästa höjning.
+export const VERSION = 3;
 
 export function saveRecipes(recipes, householdId, storage = globalThis.localStorage) {
   try {
