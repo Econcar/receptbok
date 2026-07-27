@@ -43,6 +43,13 @@ function fakeLocation(hash = '') {
   };
 }
 
+function fakeHistory() {
+  return {
+    replacedWith: null,
+    replaceState(_state, _title, url) { this.replacedWith = url; },
+  };
+}
+
 test('inloggningsadressen pekar på providern och tillbaka till oss', () => {
   const url = new URL(authorizeUrl(URL_BASE, {
     provider: 'google',
@@ -114,13 +121,15 @@ test('ett trasigt token ger null i stället för att krascha sidan', () => {
 test('återkomsten från Google sparar sessionen och städar bort fragmentet', () => {
   const storage = fakeStorage();
   const location = fakeLocation('#access_token=abc&refresh_token=def&expires_in=3600');
-  const client = createClient({ url: URL_BASE, key: 'anon', storage, location });
+  const history = fakeHistory();
+  const client = createClient({ url: URL_BASE, key: 'anon', storage, location, history });
 
   const { session, error } = client.consumeRedirect();
 
   assert.equal(error, null);
   assert.equal(session.access_token, 'abc');
-  assert.equal(location.replaced, '/', 'token får inte ligga kvar i adressfältet');
+  assert.equal(history.replacedWith, '/', 'token får inte ligga kvar i adressfältet');
+  assert.equal(location.replaced, null, 'fragmentet städas utan att sidan laddas om');
   assert.ok(storage.getItem('receptbok.session'), 'sessionen ska överleva en omladdning');
 });
 
@@ -217,6 +226,27 @@ test('rest skickar användarens token så att RLS gäller', async () => {
     assert.equal(seen.url, `${URL_BASE}/rest/v1/recipes?select=id`);
     assert.equal(seen.headers.authorization, `Bearer ${token}`);
     assert.equal(seen.headers.apikey, 'anon', 'apikey är alltid anon-nyckeln');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('insert kan be om minimal svarskropp när raden inte går att läsa tillbaka', async () => {
+  const client = createClient({
+    url: URL_BASE, key: 'anon', storage: fakeStorage(), location: fakeLocation(),
+  });
+
+  const original = globalThis.fetch;
+  let seen;
+  globalThis.fetch = async (url, init) => {
+    seen = { url, headers: init.headers, body: JSON.parse(init.body) };
+    return new Response('', { status: 201 });
+  };
+
+  try {
+    await client.insert('households', { name: 'Familjen' }, { returning: 'minimal' });
+    assert.equal(seen.headers.prefer, 'return=minimal');
+    assert.deepEqual(seen.body, { name: 'Familjen' }, 'created_by sätts av databasen');
   } finally {
     globalThis.fetch = original;
   }

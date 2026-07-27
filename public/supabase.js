@@ -96,11 +96,13 @@ const STORAGE_KEY = 'receptbok.session';
  * @param {string} opts.key  Publik anon-nyckel
  * @param {Storage} [opts.storage]   Default localStorage
  * @param {Location} [opts.location] Default window.location
+ * @param {History} [opts.history]   Default window.history
  */
-export function createClient({ url, key, storage, location } = {}) {
+export function createClient({ url, key, storage, location, history } = {}) {
   const base = trimUrl(url);
   const store = storage ?? globalThis.localStorage;
   const loc = location ?? globalThis.location;
+  const hist = history ?? globalThis.history;
 
   let session = readStored();
   let refreshing = null;
@@ -131,10 +133,15 @@ export function createClient({ url, key, storage, location } = {}) {
    */
   function consumeRedirect() {
     const { session: fresh, error } = parseSessionFromHash(loc?.hash ?? '');
-    if (fresh || error) {
-      loc?.replace?.(loc.pathname + loc.search);
-    }
     if (fresh) persist(fresh);
+
+    if (fresh || error) {
+      // replaceState och inte location.replace: det senare är en navigering och
+      // laddar om sidan mitt i uppstarten.
+      const clean = `${loc?.pathname ?? '/'}${loc?.search ?? ''}`;
+      if (hist?.replaceState) hist.replaceState(null, '', clean);
+      else loc?.replace?.(clean);
+    }
     return { session: fresh, error };
   }
 
@@ -215,11 +222,15 @@ export function createClient({ url, key, storage, location } = {}) {
     return data;
   }
 
-  /** Insert som returnerar raden – annars vet vi inte vilket id den fick. */
-  const insert = (table, row) => rest(table, {
+  /**
+   * Insert. `returning: 'minimal'` behövs när raden inte är läsbar i samma
+   * ögonblick som den skrivs – RETURNING kräver att select-policyn passerar,
+   * och för ett nyss skapat hushåll hinner medlemsraden inte finnas än.
+   */
+  const insert = (table, row, { returning = 'representation' } = {}) => rest(table, {
     method: 'POST',
     body: row,
-    headers: { prefer: 'return=representation' },
+    headers: { prefer: `return=${returning}` },
   });
 
   return {

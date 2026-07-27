@@ -100,10 +100,39 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'Anna raderade % rader ur Bertils recept – RLS läcker', n; end if;
 
-  -- Ett eget recept ska däremot gå att lägga till.
-  insert into public.recipes (household_id, created_by, title)
-  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          '11111111-1111-1111-1111-111111111111', 'Annas våfflor');
+  -- Ett eget recept ska däremot gå att lägga till, utan att created_by anges:
+  -- kolumnens default är auth.uid(), vilket är vad policyn kräver.
+  insert into public.recipes (household_id, title)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Annas våfflor');
+end $$;
+
+-- Att skapa ett hushåll är ett eget flöde, och det svåraste i hela schemat:
+-- policyn kräver created_by = auth.uid(), och triggern måste göra skaparen till
+-- ägare i samma andetag. Missas något av det blir användaren utelåst från sitt
+-- eget hushåll direkt. Uppsättningen ovan skapar hushållen som postgres och
+-- säger därför ingenting om det här – det måste testas som inloggad.
+do $$
+declare
+  nytt uuid;
+  n integer;
+begin
+  insert into public.households (name) values ('Annas andra hushåll');
+
+  select id into nytt from public.households where name = 'Annas andra hushåll';
+  if nytt is null then
+    raise exception 'Anna kan inte läsa hushållet hon just skapade';
+  end if;
+
+  select count(*) into n from public.household_members
+  where household_id = nytt
+    and user_id = '11111111-1111-1111-1111-111111111111'
+    and role = 'owner';
+  if n <> 1 then
+    raise exception 'Anna blev inte ägare av sitt eget hushåll – triggern gjorde inte sitt';
+  end if;
+
+  select count(*) into n from public.households;
+  if n <> 2 then raise exception 'Anna ser % hushåll, förväntade 2', n; end if;
 end $$;
 
 -- --- Bertil, spegelvänt ----------------------------------------------------

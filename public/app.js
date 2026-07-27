@@ -119,9 +119,13 @@ async function createHousehold(client, user) {
   if (!name) return;
 
   setStatus('Skapar hushåll …');
-  // created_by måste vara den inloggade: policyn "vem som helst skapar ett
-  // hushåll" kräver det, och triggern gör samma användare till ägare.
-  await client.insert('households', { name, created_by: user.sub });
+  // Bara namnet skickas. created_by sätts av kolumnens default till auth.uid(),
+  // vilket är precis vad policyn kräver – klienten ska inte kunna ha fel om det.
+  //
+  // return=minimal av samma skäl: raden går inte att läsa tillbaka i samma
+  // ögonblick som den skapas, eftersom triggern hinner göra oss till medlem
+  // först efteråt. Vi hämtar hushållet i nästa anrop i stället.
+  await client.insert('households', { name }, { returning: 'minimal' });
   await loadHousehold(client, user);
 }
 

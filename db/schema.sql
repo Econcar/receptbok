@@ -34,13 +34,21 @@ $$;
 
 -- Hushållet överlever sin skapare: created_by nollas om kontot tas bort, men
 -- samlingen tillhör familjen och ska inte följa med i fallet.
+--
+-- default auth.uid() är inte bekvämlighet. Policyn kräver created_by =
+-- auth.uid(), och så länge klienten fyller i värdet själv finns ett läge där
+-- den skickar fel eller inget alls och insertet avvisas utan att någon förstår
+-- varför. Databasen vet vem som skriver – låt den avgöra det.
 create table if not exists public.households (
   id         uuid primary key default gen_random_uuid(),
   name       text not null check (length(btrim(name)) > 0),
-  created_by uuid references auth.users(id) on delete set null,
+  created_by uuid default auth.uid() references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.households
+  alter column created_by set default auth.uid();
 
 create table if not exists public.household_members (
   household_id uuid not null references public.households(id) on delete cascade,
@@ -56,7 +64,7 @@ create index if not exists household_members_user_idx
 create table if not exists public.recipes (
   id             uuid primary key default gen_random_uuid(),
   household_id   uuid not null references public.households(id) on delete cascade,
-  created_by     uuid references auth.users(id) on delete set null,
+  created_by     uuid default auth.uid() references auth.users(id) on delete set null,
   title          text not null check (length(btrim(title)) > 0),
   source_url     text,
   source_name    text,
@@ -73,6 +81,9 @@ create table if not exists public.recipes (
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
+
+alter table public.recipes
+  alter column created_by set default auth.uid();
 
 create index if not exists recipes_household_idx on public.recipes (household_id);
 
