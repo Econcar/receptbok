@@ -96,7 +96,7 @@ innehålla `/rest/v1/`.
 - [x] Fas 1: schema, Google-inloggning, hushåll – RLS bevisad med `db/rls-test.sql`
 - [x] Fas 2: import från länk, manuell inmatning, översättning av engelska recept,
       bilder och kategorier
-- [ ] Fas 3: kökläget – sök, receptvy, offline, wake lock
+- [x] Fas 3: kökläget – sök, receptvy, offline, wake lock
 - [ ] Fas 4: ingredienstolkning
 - [ ] Fas 5: veckoplan + inköpslista
 - [ ] Fas 6: inbjudan till hushållet
