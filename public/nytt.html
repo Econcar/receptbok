@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lägg till recept · Receptbok</title>
+<meta name="description" content="Importera ett recept från en länk eller mata in det för hand.">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Lägg till recept</h1>
+  <p class="tagline"><a href="/">← Tillbaka till recepten</a></p>
+  <div class="account" id="account" hidden>
+    <span id="account-name"></span>
+    <button type="button" id="signout" class="linkbutton">Logga ut</button>
+  </div>
+</header>
+
+<main>
+  <p id="status" class="status" role="status">Kontrollerar …</p>
+
+  <section class="panel" id="gate" hidden>
+    <p>Gå till <a href="/">startsidan</a> för att logga in och skapa ditt hushåll.
+      Recept sparas alltid till ett hushåll.</p>
+  </section>
+
+  <div id="editor-wrap" hidden>
+    <section class="panel">
+      <h2>Importera från länk</h2>
+      <form class="form" id="import-form">
+        <label for="import-url">Adress till receptet</label>
+        <input type="url" id="import-url" autocomplete="off"
+               placeholder="https://www.ica.se/recept/...">
+        <button type="submit" class="button" id="import-button">Hämta receptet</button>
+      </form>
+      <p class="muted">Fungerar på sajter som publicerar receptet maskinläsbart – ICA,
+        Coop, Arla, Köket.se och de flesta andra. Engelska recept översätts och får
+        måtten omräknade till dl, msk och grader Celsius. Går importen inte igenom
+        skriver du in receptet nedan i stället.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Receptet</h2>
+      <form class="form" id="recipe-form">
+        <label for="recipe-title">Titel</label>
+        <input type="text" id="recipe-title" maxlength="200" required autocomplete="off">
+
+        <label for="recipe-source">Källa (länk)</label>
+        <input type="url" id="recipe-source" autocomplete="off">
+
+        <label for="recipe-image">Bild (länk)</label>
+        <input type="url" id="recipe-image" autocomplete="off">
+
+        <div class="row">
+          <span>
+            <label for="recipe-servings">Portioner</label>
+            <input type="number" id="recipe-servings" min="1" max="99" inputmode="numeric">
+          </span>
+          <span>
+            <label for="recipe-time">Tid (minuter)</label>
+            <input type="number" id="recipe-time" min="1" max="6000" inputmode="numeric">
+          </span>
+        </div>
+
+        <label for="recipe-ingredients">Ingredienser – en per rad</label>
+        <textarea id="recipe-ingredients" rows="8"
+                  placeholder="3 dl vetemjöl&#10;6 dl mjölk&#10;3 ägg"></textarea>
+
+        <label for="recipe-instructions">Gör så här – ett steg per rad</label>
+        <textarea id="recipe-instructions" rows="6"></textarea>
+
+        <label id="tag-label">Kategorier</label>
+        <div class="chips" id="tag-chips" role="group" aria-labelledby="tag-label"></div>
+        <div class="row">
+          <input type="text" id="new-tag" maxlength="40" autocomplete="off"
+                 placeholder="Egen kategori" aria-label="Egen kategori">
+          <button type="button" class="linkbutton" id="add-tag">Lägg till</button>
+        </div>
+
+        <div class="row">
+          <button type="submit" class="button">Spara receptet</button>
+          <button type="button" class="linkbutton" id="translate-button">Översätt till svenska</button>
+          <button type="button" class="linkbutton" id="reset-button">Rensa</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  <span id="meta"></span>
+</footer>
+
+<script type="module" src="/nytt.js"></script>
+</body>
+</html>

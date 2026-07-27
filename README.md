@@ -26,9 +26,13 @@ Projektet ligger på Google Drive (G:\) där lokala `npm install` är opålitlig
 
 ```
 public/              Statisk frontend (Cloudflare Pages root)
+  index.html/app.js    Listsidan: recepten med bild, filtrerade på kategori
+  nytt.html/nytt.js    Inmatningssidan: import, översättning, handinmatning
+  session.js           Delat av båda: inloggning, kontorad, hushåll
 functions/api/       Pages Functions, en fil per endpoint
-lib/                 Delad logik: ld+json-läsning, HTTP. Inga Node-API:er –
-                     koden ska kunna köras både i Node och på Workers
+lib/                 Delad logik: ld+json, HTTP, tolkning, översättning. Inga
+                     Node-API:er – koden körs både i Node och på Workers.
+                     Nås inte från webbläsaren; public/ är Pages output root
 db/                  SQL-schema för Supabase + RLS-testet
 tests/               node --test
 scripts/             Pre-deploy-spärr m.m.
@@ -58,6 +62,15 @@ skyddas av RLS):
 | --- | --- |
 | `SUPABASE_URL` | `https://<projekt>.supabase.co` – **bara roten**, ingen sökväg |
 | `SUPABASE_ANON_KEY` | Publik anon-nyckel |
+
+Pages Functions (Cloudflare → Settings → **Variables and Secrets**). Functions läser inte
+`config.js` utan har en egen miljö, och variabler slår igenom först efter en ny deploy:
+
+| Namn | Typ | Beskrivning |
+| --- | --- | --- |
+| `SUPABASE_URL` | Text | Samma rot som ovan |
+| `SUPABASE_ANON_KEY` | Text | Samma anon-nyckel; används för att verifiera inloggning |
+| `ANTHROPIC_API_KEY` | **Secret** | Översättningen i `/api/translate`. Till skillnad från anon-nyckeln är den här hemlig och får aldrig hamna i `public/` |
 
 ## Uppsättning
 

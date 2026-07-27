@@ -103,16 +103,81 @@ body {
 .button:focus-visible,
 .linkbutton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.results { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.libraryhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.libraryhead h2 { margin: 0; font-size: 1.25rem; }
+.libraryhead p { margin: 0.2rem 0 0; font-size: 0.9rem; }
+.libraryhead a.button { text-decoration: none; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+
+.chip {
+  padding: 0.3rem 0.75rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.chip:hover { border-color: var(--accent); }
+.chip[data-active="true"] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.empty { grid-column: 1 / -1; color: var(--muted); font-size: 0.9rem; }
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+/* Ett öppnat recept läses i köket och ska få hela bredden. */
+.card:has(details[open]) { grid-column: 1 / -1; }
+
+.tagbar { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0 0; }
+
+.tag {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  text-transform: capitalize;
+}
 
 .card {
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
   padding: 0.9rem 1rem;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+
+.card-body { display: grid; gap: 0.35rem; }
 
 .card a { color: var(--accent); font-size: 0.85rem; }
 .card .source { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.85rem; }

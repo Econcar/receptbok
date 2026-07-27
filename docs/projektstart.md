@@ -148,8 +148,9 @@ ingrediens är tolkad.
 ## 10. Öppna beslut
 
 - ~~**Namn på projektet.**~~ Avgjort: `receptbok`. Repot är omdöpt.
-- **Bilder:** spara i Supabase Storage eller bara länka till källan? Länk är gratis och
-  upphovsrättsligt enklare, men bilden försvinner när källan gör det.
+- ~~**Bilder:**~~ Avgjort: länk till källan. Gratis, upphovsrättsligt enklare, och
+  försvinner bilden krymper kortet i stället för att visa en trasig ikon. Blir det
+  ett problem i praktiken är Supabase Storage kvar som möjlighet.
 - **Offline:** bara läsa, eller även redigera med synk efteråt? Redigering offline betyder
   konflikthantering – betydligt mer arbete.
 - **Inköpslistan:** gruppera per butiksavdelning (mejeri, grönt, torrvaror)? Kräver att

@@ -104,6 +104,31 @@ create table if not exists public.recipe_ingredients (
 create index if not exists recipe_ingredients_recipe_idx
   on public.recipe_ingredients (recipe_id, position);
 
+-- Kategorier: middag, frukost, vegetariskt, soppa, pasta … Fritt formulerade
+-- och per hushåll, inte en fast lista – vad som är en användbar indelning vet
+-- familjen bättre än schemat.
+--
+-- Namnet lagras gemenformat och villkoret säger det uttryckligen. Utan det blir
+-- "Vegetariskt" och "vegetariskt" två kategorier som ser likadana ut i listan,
+-- och unikhetsvillkoret nedan hade inte fångat det.
+create table if not exists public.tags (
+  id           uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households(id) on delete cascade,
+  name         text not null check (name = lower(btrim(name)) and length(name) > 0),
+  created_at   timestamptz not null default now(),
+  unique (household_id, name)
+);
+
+create table if not exists public.recipe_tags (
+  recipe_id uuid not null references public.recipes(id) on delete cascade,
+  tag_id    uuid not null references public.tags(id) on delete cascade,
+  primary key (recipe_id, tag_id)
+);
+
+-- För filtreringen: primärnyckeln täcker vägen från recept till kategori,
+-- det här indexet vägen tillbaka.
+create index if not exists recipe_tags_tag_idx on public.recipe_tags (tag_id);
+
 -- ---------------------------------------------------------------------------
 -- Policy-hjälpare (kräver tabellerna ovan)
 -- ---------------------------------------------------------------------------
@@ -210,6 +235,8 @@ alter table public.households         enable row level security;
 alter table public.household_members  enable row level security;
 alter table public.recipes            enable row level security;
 alter table public.recipe_ingredients enable row level security;
+alter table public.tags               enable row level security;
+alter table public.recipe_tags        enable row level security;
 
 -- Policyer skrivs om vid varje körning, så skriptet förblir idempotent.
 
@@ -283,6 +310,21 @@ create policy "ingredienser följer receptet"
   using (public.is_recipe_in_my_household(recipe_id))
   with check (public.is_recipe_in_my_household(recipe_id));
 
+drop policy if exists "hushållets kategorier" on public.tags;
+create policy "hushållets kategorier"
+  on public.tags for all to authenticated
+  using (public.is_household_member(household_id))
+  with check (public.is_household_member(household_id));
+
+-- Kopplingen skyddas via receptet. Att också kräva åtkomst till taggen vore
+-- överflödigt: en tagg i ett annat hushåll går inte att peka på ändå, eftersom
+-- främmande nyckeln bara accepterar rader som finns.
+drop policy if exists "kategorier följer receptet" on public.recipe_tags;
+create policy "kategorier följer receptet"
+  on public.recipe_tags for all to authenticated
+  using (public.is_recipe_in_my_household(recipe_id))
+  with check (public.is_recipe_in_my_household(recipe_id));
+
 -- ---------------------------------------------------------------------------
 -- Rättigheter
 -- ---------------------------------------------------------------------------
@@ -290,9 +332,11 @@ create policy "ingredienser följer receptet"
 -- skillnad från leasingprojektet, där annonserna var global läsdata.
 
 revoke all on public.households, public.household_members,
-              public.recipes, public.recipe_ingredients from anon;
+              public.recipes, public.recipe_ingredients,
+              public.tags, public.recipe_tags from anon;
 
 grant select, insert, update, delete
   on public.households, public.household_members,
-     public.recipes, public.recipe_ingredients
+     public.recipes, public.recipe_ingredients,
+     public.tags, public.recipe_tags
   to authenticated;
