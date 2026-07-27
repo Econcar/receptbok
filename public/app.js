@@ -11,7 +11,10 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, startSession,
 } from '/session.js';
 import { matchesQuery } from '/search.js';
-import { loadRecipes as loadCached, saveRecipes, savedAgo } from '/store.js';
+import {
+  loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
+  saveHousehold, saveRecipes, savedAgo,
+} from '/store.js';
 import { keepAwake, letSleep } from '/kitchen.js';
 
 const els = {
@@ -83,7 +86,17 @@ async function start() {
 
 async function show(client) {
   setStatus('Hämtar hushåll …');
-  household = await loadHousehold(client);
+
+  // Hushållet hämtas före recepten och avgör om biblioteket ritas alls. Utan
+  // en sparad kopia här spelar den sparade receptkopian ingen roll – då faller
+  // laddningen redan på det här anropet, och kökläget är oanvändbart utan nät.
+  try {
+    household = await loadHousehold(client);
+    if (household) saveHousehold(household);
+  } catch (err) {
+    household = cachedHousehold();
+    if (!household) throw err;
+  }
 
   if (!household) {
     showOnly(els.setup);
@@ -108,7 +121,7 @@ async function fetchRecipes(client) {
   } catch (err) {
     // Utan nät är den sparade kopian hela poängen med kökläget. Finns ingen
     // är felet däremot värt att visa – då är det inte offline som är problemet.
-    const sparat = loadCached(household.id);
+    const sparat = cachedRecipes(household.id);
     if (!sparat) throw err;
     recipes = sparat.recipes;
     setStatus(`Ingen kontakt med servern. Visar kopian som sparades ${savedAgo(sparat.saved_at)}.`, 'warn');

@@ -150,11 +150,20 @@ export function createClient({ url, key, storage, location, history } = {}) {
     // En enda förnyelse i taget: två samtidiga anrop bränner varandras token.
     refreshing ??= (async () => {
       try {
-        const res = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, {
-          method: 'POST',
-          headers: { apikey: key, 'content-type': 'application/json' },
-          body: JSON.stringify({ refresh_token: session.refresh_token }),
-        });
+        let res;
+        try {
+          res = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST',
+            headers: { apikey: key, 'content-type': 'application/json' },
+            body: JSON.stringify({ refresh_token: session.refresh_token }),
+          });
+        } catch {
+          // Nätverksfel är inte ett avvisat token. Behåll sessionen: utan nät
+          // finns ändå bara den sparade kopian att läsa, och att logga ut hade
+          // låst ut användaren ur kökläget just när det behövs som mest.
+          return session;
+        }
+
         if (!res.ok) {
           persist(null); // Förbrukat eller återkallat – be om ny inloggning.
           return null;

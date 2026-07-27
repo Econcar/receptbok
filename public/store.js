@@ -10,6 +10,7 @@
 // storage skickas in, så filen går att köra under node --test.
 
 const KEY = 'receptbok.recept';
+const HUSHÅLL = 'receptbok.hushall';
 
 // Höjs när formen på det sparade ändras. En gammal kopia kastas då i stället
 // för att renderas fel – recepten hämtas ändå om så fort det finns nät.
@@ -51,6 +52,32 @@ export function loadRecipes(householdId, storage = globalThis.localStorage) {
   if (!Array.isArray(saved.recipes)) return null;
 
   return { recipes: saved.recipes, saved_at: saved.saved_at ?? 0 };
+}
+
+/**
+ * Hushållet sparas separat, för det hämtas före recepten och avgör om sidan
+ * över huvud taget ritar biblioteket. Utan det spelar den sparade
+ * receptkopian ingen roll – då faller laddningen redan på hushållsanropet.
+ */
+export function saveHousehold(household, storage = globalThis.localStorage) {
+  try {
+    storage?.setItem(HUSHÅLL, JSON.stringify({ version: VERSION, household }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadHousehold(storage = globalThis.localStorage) {
+  try {
+    const raw = storage?.getItem(HUSHÅLL);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved?.version !== VERSION) return null;
+    return saved.household?.id ? saved.household : null;
+  } catch {
+    return null;
+  }
 }
 
 export function clearRecipes(storage = globalThis.localStorage) {

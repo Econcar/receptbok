@@ -1,6 +1,6 @@
 // Enkel service worker: precache av skalet, network-first för API, cache-first för statiskt.
 // Höj CACHE_VERSION när skalet ändras.
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const DATA_CACHE = `data-${CACHE_VERSION}`;
 
@@ -23,10 +23,26 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()),
-  );
+  event.waitUntil(installShell().then(() => self.skipWaiting()));
 });
+
+/**
+ * En adress i taget, inte cache.addAll.
+ *
+ * addAll är allt-eller-inget: misslyckas en enda adress avvisas hela
+ * installationen och ingenting alls cachas. Offline slutar då fungera utan
+ * att något syns. Hellre ett skal med ett hål i än inget skal.
+ */
+async function installShell() {
+  const cache = await caches.open(SHELL_CACHE);
+  await Promise.all(SHELL.map(async (url) => {
+    try {
+      await cache.add(url);
+    } catch {
+      // Adressen får saknas i cachen. Sidan hämtar den över nätet i stället.
+    }
+  }));
+}
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(

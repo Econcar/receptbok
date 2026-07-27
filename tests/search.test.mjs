@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { matchesQuery, normalize } from '../public/search.js';
-import { clearRecipes, loadRecipes, saveRecipes, savedAgo } from '../public/store.js';
+import {
+  clearRecipes, loadHousehold, loadRecipes, saveHousehold, saveRecipes, savedAgo,
+} from '../public/store.js';
 
 const RECEPT = {
   title: 'Curry med kyckling',
@@ -98,6 +100,26 @@ test('en lagring som vägrar skriva fäller inte laddningen', () => {
 
   assert.equal(saveRecipes([RECEPT], 'hus-1', trasig), false);
   assert.doesNotThrow(() => clearRecipes(trasig));
+});
+
+test('hushållet sparas separat – utan det ritas biblioteket aldrig offline', () => {
+  const storage = fakeStorage();
+  const hushåll = { id: 'hus-1', name: 'Familjen', role: 'owner' };
+
+  assert.equal(saveHousehold(hushåll, storage), true);
+  assert.deepEqual(loadHousehold(storage), hushåll);
+});
+
+test('ett halvt sparat hushåll används inte', () => {
+  const storage = fakeStorage();
+  assert.equal(loadHousehold(storage), null, 'inget sparat');
+
+  storage.setItem('receptbok.hushall', 'inte json');
+  assert.equal(loadHousehold(storage), null);
+
+  // Utan id går inga recept att slå upp, och då är kopian värdelös.
+  storage.setItem('receptbok.hushall', JSON.stringify({ version: 2, household: { name: 'X' } }));
+  assert.equal(loadHousehold(storage), null);
 });
 
 test('åldern skrivs ut i klartext', () => {
