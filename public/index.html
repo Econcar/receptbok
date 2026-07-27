@@ -46,6 +46,53 @@
   <section class="panel" id="household" hidden>
     <h2 id="household-title"></h2>
     <p id="household-meta" class="muted"></p>
+
+    <form class="form" id="import-form">
+      <label for="import-url">Importera från länk</label>
+      <input type="url" id="import-url" autocomplete="off"
+             placeholder="https://www.ica.se/recept/...">
+      <button type="submit" class="button" id="import-button">Hämta receptet</button>
+    </form>
+
+    <p class="muted">
+      Fungerar på sajter som publicerar receptet maskinläsbart – ICA, Coop, Arla,
+      Köket.se och de flesta andra. Går det inte
+      <button type="button" class="linkbutton" id="manual-toggle">matar du in det för hand</button>.
+    </p>
+  </section>
+
+  <section class="panel" id="editor" hidden>
+    <h2 id="editor-title">Nytt recept</h2>
+    <form class="form" id="recipe-form">
+      <label for="recipe-title">Titel</label>
+      <input type="text" id="recipe-title" maxlength="200" required autocomplete="off">
+
+      <label for="recipe-source">Källa (länk)</label>
+      <input type="url" id="recipe-source" autocomplete="off">
+
+      <div class="row">
+        <span>
+          <label for="recipe-servings">Portioner</label>
+          <input type="number" id="recipe-servings" min="1" max="99" inputmode="numeric">
+        </span>
+        <span>
+          <label for="recipe-time">Tid (minuter)</label>
+          <input type="number" id="recipe-time" min="1" max="6000" inputmode="numeric">
+        </span>
+      </div>
+
+      <label for="recipe-ingredients">Ingredienser – en per rad</label>
+      <textarea id="recipe-ingredients" rows="8"
+                placeholder="3 dl vetemjöl&#10;6 dl mjölk&#10;3 ägg"></textarea>
+
+      <label for="recipe-instructions">Gör så här – ett steg per rad</label>
+      <textarea id="recipe-instructions" rows="6"></textarea>
+
+      <div class="row">
+        <button type="submit" class="button">Spara receptet</button>
+        <button type="button" class="linkbutton" id="editor-cancel">Avbryt</button>
+      </div>
+    </form>
   </section>
 
   <ul id="results" class="results"></ul>

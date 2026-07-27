@@ -58,9 +58,10 @@ body {
   color: var(--muted);
 }
 
-.form input {
+.form input,
+.form textarea {
   width: 100%;
-  max-width: 22rem;
+  max-width: 34rem;
   padding: 0.5rem 0.6rem;
   font: inherit;
   color: var(--text);
@@ -68,6 +69,12 @@ body {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+
+.form textarea { resize: vertical; line-height: 1.5; }
+.form input[type="number"] { max-width: 8rem; }
+
+.row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+.row span { display: grid; gap: 0.25rem; }
 
 .button {
   padding: 0.55rem 1rem;
@@ -107,9 +114,22 @@ body {
   border-radius: 12px;
 }
 
-.card a { color: var(--text); text-decoration: none; font-weight: 600; }
-.card a:hover { color: var(--accent); }
-.card .source { color: var(--muted); font-size: 0.85rem; }
+.card a { color: var(--accent); font-size: 0.85rem; }
+.card .source { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.card summary {
+  font-weight: 600;
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.card summary::marker { color: var(--muted); }
+
+.ingredients, .steps { margin: 0.75rem 0; padding-left: 1.25rem; }
+.ingredients { list-style: none; padding-left: 0; }
+.ingredients li { padding: 0.15rem 0; border-bottom: 1px solid var(--line); }
+.ingredients li:last-child { border-bottom: 0; }
+.steps li { padding: 0.2rem 0; }
 
 .badge {
   justify-self: start;

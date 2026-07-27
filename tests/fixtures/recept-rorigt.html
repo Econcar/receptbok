@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<title>Lasagne</title>
+<!-- Verklighetens variant: HowToSection, HTML i texten, bild som ImageObject
+     i en array, och en publisher att skriva ut som källa. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Recipe",
+  "name": "Lasagne &amp; sallad",
+  "url": "https://exempel.se/recept/lasagne",
+  "publisher": { "@type": "Organization", "name": "Exempelsajten" },
+  "image": [
+    { "@type": "ImageObject", "url": "https://exempel.se/lasagne.jpg", "width": 1200 },
+    "https://exempel.se/lasagne-liten.jpg"
+  ],
+  "recipeYield": ["4-6 portioner", "4"],
+  "totalTime": "PT1H15M",
+  "recipeIngredient": [
+    "  500 g  köttfärs ",
+    "1 <b>gul</b> lök",
+    "2 dl gr&auml;dde"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToSection",
+      "name": "Köttfärssåsen",
+      "itemListElement": [
+        { "@type": "HowToStep", "text": "Bryn färsen." },
+        { "@type": "HowToStep", "text": "Tillsätt l&ouml;k och låt puttra." }
+      ]
+    },
+    {
+      "@type": "HowToSection",
+      "name": "Montering",
+      "itemListElement": [
+        { "@type": "HowToStep", "text": "<p>Varva såsen med lasagneplattor.</p>" }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body><h1>Lasagne</h1></body>
+</html>

@@ -3,7 +3,7 @@
 export const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, OPTIONS',
-  'access-control-allow-headers': 'content-type',
+  'access-control-allow-headers': 'authorization, content-type',
 };
 
 export function json(body, { status = 200, maxAge = 60 } = {}) {
