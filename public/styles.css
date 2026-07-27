@@ -192,6 +192,13 @@ body {
 
 .sectionhead { margin: 1.75rem 0 0.75rem; font-size: 1.1rem; }
 
+.invitepanel { margin-bottom: 1rem; }
+.invitepanel h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.invitepanel input { width: 100%; max-width: 28rem; padding: 0.5rem 0.6rem;
+                     font: inherit; font-size: 0.85rem; color: var(--muted);
+                     background: var(--bg); border: 1px solid var(--line);
+                     border-radius: 8px; }
+
 .week {
   list-style: none;
   margin: 0;

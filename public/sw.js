@@ -1,6 +1,6 @@
 // Enkel service worker: precache av skalet, network-first för API, cache-first för statiskt.
 // Höj CACHE_VERSION när skalet ändras.
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const DATA_CACHE = `data-${CACHE_VERSION}`;
 

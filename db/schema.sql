@@ -179,6 +179,27 @@ create table if not exists public.shopping_list_items (
 create index if not exists shopping_list_household_idx
   on public.shopping_list_items (household_id);
 
+-- Inbjudningar. En delbar länk och inte en inmatad e-postadress: adressen
+-- kräver att man vet exakt vilket Google-konto den andra loggar in med, och
+-- gissar man fel händer ingenting alls. Ett tyst fel är sämre än ett synligt.
+--
+-- Länken bär i gengäld tre spärrar: den går ut, den går bara att lösa in en
+-- gång, och bara ägare kan skapa den.
+create table if not exists public.household_invites (
+  id           uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households(id) on delete cascade,
+  -- Nyckeln i länken. Skapas av databasen, aldrig av klienten.
+  token        uuid not null unique default gen_random_uuid(),
+  created_by   uuid default auth.uid() references auth.users(id) on delete set null,
+  expires_at   timestamptz not null default now() + interval '7 days',
+  used_at      timestamptz,
+  used_by      uuid references auth.users(id) on delete set null,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists household_invites_household_idx
+  on public.household_invites (household_id);
+
 -- ---------------------------------------------------------------------------
 -- Policy-hjälpare (kräver tabellerna ovan)
 -- ---------------------------------------------------------------------------
@@ -283,6 +304,62 @@ create trigger households_add_creator_as_owner
   for each row execute function public.add_creator_as_owner();
 
 -- ---------------------------------------------------------------------------
+-- Inlösen av inbjudan
+-- ---------------------------------------------------------------------------
+--
+-- Måste vara security definer, och det är hela poängen med funktionen: den som
+-- löser in en inbjudan är per definition inte medlem ännu, och kan därför
+-- varken läsa inbjudningsraden eller skriva sig in i household_members. Båda
+-- policyerna hade sagt nej.
+--
+-- Funktionen är därför den enda vägen in, och den kontrollerar allt en policy
+-- annars hade gjort: att man är inloggad, att inbjudan finns, inte är
+-- förbrukad och inte har gått ut. Ingen av kontrollerna får utelämnas – utan
+-- dem vore det en öppen dörr till hushållets recept.
+create or replace function public.redeem_household_invite(invite_token uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  inbjudan public.household_invites;
+begin
+  if auth.uid() is null then
+    raise exception 'Inbjudan kan bara lösas in av en inloggad användare'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- for update låser raden, så att två samtidiga inlösningar av samma
+  -- engångslänk inte båda hinner se den som oanvänd.
+  select * into inbjudan
+  from public.household_invites
+  where token = invite_token
+    and used_at is null
+    and expires_at > now()
+  for update;
+
+  if not found then
+    raise exception 'Inbjudan är ogiltig, förbrukad eller har gått ut'
+      using errcode = 'no_data_found';
+  end if;
+
+  insert into public.household_members (household_id, user_id, role)
+  values (inbjudan.household_id, auth.uid(), 'member')
+  on conflict do nothing;
+
+  update public.household_invites
+  set used_at = now(), used_by = auth.uid()
+  where id = inbjudan.id;
+
+  return inbjudan.household_id;
+end;
+$$;
+
+revoke execute on function public.redeem_household_invite(uuid) from public;
+grant  execute on function public.redeem_household_invite(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
 
@@ -294,6 +371,7 @@ alter table public.tags               enable row level security;
 alter table public.recipe_tags        enable row level security;
 alter table public.meal_plan          enable row level security;
 alter table public.shopping_list_items enable row level security;
+alter table public.household_invites  enable row level security;
 
 -- Policyer skrivs om vid varje körning, så skriptet förblir idempotent.
 
@@ -400,6 +478,25 @@ create policy "hushållets inköpslista"
   using (public.is_household_member(household_id))
   with check (public.is_household_member(household_id));
 
+-- Inbjudningar är läsbara för hushållets medlemmar och skapas bara av ägare.
+-- Den som ska lösa in en inbjudan går inte via de här policyerna alls, utan
+-- via redeem_household_invite – annars hade vem som helst kunnat lista
+-- inbjudningar och gå in genom vilken dörr som helst.
+drop policy if exists "medlemmar ser inbjudningar" on public.household_invites;
+create policy "medlemmar ser inbjudningar"
+  on public.household_invites for select to authenticated
+  using (public.is_household_member(household_id));
+
+drop policy if exists "ägaren bjuder in med länk" on public.household_invites;
+create policy "ägaren bjuder in med länk"
+  on public.household_invites for insert to authenticated
+  with check (public.is_household_owner(household_id));
+
+drop policy if exists "ägaren återkallar inbjudan" on public.household_invites;
+create policy "ägaren återkallar inbjudan"
+  on public.household_invites for delete to authenticated
+  using (public.is_household_owner(household_id));
+
 -- ---------------------------------------------------------------------------
 -- Rättigheter
 -- ---------------------------------------------------------------------------
@@ -409,11 +506,13 @@ create policy "hushållets inköpslista"
 revoke all on public.households, public.household_members,
               public.recipes, public.recipe_ingredients,
               public.tags, public.recipe_tags,
-              public.meal_plan, public.shopping_list_items from anon;
+              public.meal_plan, public.shopping_list_items,
+              public.household_invites from anon;
 
 grant select, insert, update, delete
   on public.households, public.household_members,
      public.recipes, public.recipe_ingredients,
      public.tags, public.recipe_tags,
-     public.meal_plan, public.shopping_list_items
+     public.meal_plan, public.shopping_list_items,
+     public.household_invites
   to authenticated;

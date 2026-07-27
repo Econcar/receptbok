@@ -56,6 +56,17 @@
       </span>
     </div>
 
+    <section class="panel invitepanel" id="invite" hidden>
+      <h3>Bjud in till hushållet</h3>
+      <p class="muted">Länken gäller i sju dagar och kan lösas in en gång. Den
+        som öppnar den och loggar in med Google blir medlem och ser alla recept.</p>
+      <button type="button" class="button" id="invite-create">Skapa inbjudningslänk</button>
+      <div class="row" id="invite-result" hidden>
+        <input type="text" id="invite-link" readonly aria-label="Inbjudningslänk">
+        <button type="button" class="linkbutton" id="invite-copy">Kopiera</button>
+      </div>
+    </section>
+
     <label class="sr-only" for="search">Sök bland recepten</label>
     <input type="search" id="search" class="search" autocomplete="off"
            placeholder="Sök på namn eller ingrediens – t.ex. kyckling">

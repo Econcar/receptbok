@@ -247,6 +247,110 @@ begin
   exception when insufficient_privilege then
     null; -- rätt beteende
   end;
+
+  select count(*) into n from public.household_invites;
+  if n <> 0 then raise exception 'Bertil ser Annas inbjudningar – RLS läcker'; end if;
+end $$;
+
+-- --- Inbjudan --------------------------------------------------------------
+--
+-- Inlösen är det känsligaste stället i hela schemat: funktionen är security
+-- definer och går alltså förbi RLS med flit, eftersom den som löser in en
+-- inbjudan ännu inte är medlem. Varje kontroll den gör måste därför testas,
+-- annars är den en öppen dörr till hushållets recept.
+
+-- Tokens måste överleva mellan blocken, och rollbytena sker på toppnivå precis
+-- som i resten av filen – ett jwt-byte inuti ett DO-block är svårare att följa
+-- och lättare att få fel.
+create temporary table testinbjudan (sort text primary key, token uuid) on commit drop;
+
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+
+-- Anna är ägare och får bjuda in. Tre länkar: en giltig, en förbrukad, en utgången.
+insert into testinbjudan (sort, token)
+select 'giltig', token from (
+  insert into public.household_invites (household_id)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') returning token
+) as ny;
+
+insert into testinbjudan (sort, token)
+select 'förbrukad', token from (
+  insert into public.household_invites (household_id, used_at)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now()) returning token
+) as ny;
+
+insert into testinbjudan (sort, token)
+select 'utgången', token from (
+  insert into public.household_invites (household_id, expires_at)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now() - interval '1 day') returning token
+) as ny;
+
+-- --- Bertil löser in -------------------------------------------------------
+
+set local request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}';
+
+do $$
+declare n integer;
+begin
+  -- Bertil är inte ägare i Annas hushåll och får inte skapa inbjudningar dit.
+  begin
+    insert into public.household_invites (household_id)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    raise exception 'Bertil kunde skapa en inbjudan till Annas hushåll – RLS läcker';
+  exception when insufficient_privilege then
+    null; -- rätt beteende
+  end;
+
+  begin
+    perform public.redeem_household_invite((select token from testinbjudan where sort = 'förbrukad'));
+    raise exception 'En förbrukad inbjudan gick att lösa in – engångsbruket håller inte';
+  exception when no_data_found then
+    null; -- rätt beteende
+  end;
+
+  begin
+    perform public.redeem_household_invite((select token from testinbjudan where sort = 'utgången'));
+    raise exception 'En utgången inbjudan gick att lösa in – giltighetstiden håller inte';
+  exception when no_data_found then
+    null; -- rätt beteende
+  end;
+
+  begin
+    perform public.redeem_household_invite(gen_random_uuid());
+    raise exception 'Ett påhittat token gick att lösa in';
+  exception when no_data_found then
+    null; -- rätt beteende
+  end;
+
+  -- Den giltiga länken släpper in honom.
+  perform public.redeem_household_invite((select token from testinbjudan where sort = 'giltig'));
+
+  select count(*) into n from public.household_members
+  where household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    and user_id = '22222222-2222-2222-2222-222222222222'
+    and role = 'member';
+  if n <> 1 then raise exception 'Inbjudan släppte inte in Bertil som medlem'; end if;
+
+  -- Nu ser han Annas recept, för nu är de hans hushålls recept också.
+  select count(*) into n from public.recipes where title like 'Annas%';
+  if n = 0 then raise exception 'Bertil kom in i hushållet men ser inte recepten'; end if;
+
+  -- Men medlem är inte ägare: han får fortfarande inte bjuda in fler.
+  begin
+    insert into public.household_invites (household_id)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    raise exception 'En medlem kunde bjuda in fler – bara ägare ska få det';
+  exception when insufficient_privilege then
+    null; -- rätt beteende
+  end;
+
+  -- Och samma länk går inte att lösa in igen.
+  begin
+    perform public.redeem_household_invite((select token from testinbjudan where sort = 'giltig'));
+    raise exception 'Länken gick att lösa in två gånger – engångsbruket håller inte';
+  exception when no_data_found then
+    null; -- rätt beteende
+  end;
 end $$;
 
 -- --- Utloggad --------------------------------------------------------------

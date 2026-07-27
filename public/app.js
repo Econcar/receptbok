@@ -28,6 +28,11 @@ const els = {
   householdTitle: document.getElementById('household-title'),
   householdMeta: document.getElementById('household-meta'),
   reparse: document.getElementById('reparse'),
+  invite: document.getElementById('invite'),
+  inviteCreate: document.getElementById('invite-create'),
+  inviteResult: document.getElementById('invite-result'),
+  inviteLink: document.getElementById('invite-link'),
+  inviteCopy: document.getElementById('invite-copy'),
   search: document.getElementById('search'),
   filters: document.getElementById('filters'),
   results: document.getElementById('results'),
@@ -55,16 +60,27 @@ function showOnly(section) {
   }
 }
 
+/** En inbjudningslänk är /?invite=<token>. */
+const inbjudan = new URL(location.href).searchParams.get('invite');
+
 async function start() {
   const { client, user, error } = await startSession();
   if (error) setStatus(`Inloggningen avbröts: ${error}`, 'error');
 
   if (!user) {
-    els.signInButton.addEventListener('click', () => client.signIn());
+    // Med en inbjudan i adressen måste hela adressen tillbaka efter
+    // inloggningen, annars tappas token på vägen och länken är förbrukad i
+    // användarens ögon utan att någonsin ha lösts in.
+    els.signInButton.addEventListener('click', () => client.signIn(
+      inbjudan ? location.href : location.origin,
+    ));
     showOnly(els.signIn);
-    if (!error) setStatus('Inte inloggad.');
+    if (inbjudan) setStatus('Du har blivit inbjuden till ett hushåll. Logga in för att gå med.');
+    else if (!error) setStatus('Inte inloggad.'); // Felet står redan där.
     return;
   }
+
+  if (inbjudan) await lösIn(client);
 
   els.setupForm.addEventListener('submit', guard(async (event) => {
     event.preventDefault();
@@ -84,6 +100,17 @@ async function start() {
   });
 
   els.reparse.addEventListener('click', guard(() => reparse(client)));
+  els.inviteCreate.addEventListener('click', guard(() => skapaInbjudan(client)));
+
+  els.inviteCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(els.inviteLink.value);
+      els.inviteCopy.textContent = 'Kopierad';
+    } catch {
+      // Utan urklippsrättighet får man markera själv – fältet är läsbart.
+      els.inviteLink.select();
+    }
+  });
 
   await show(client);
 }
@@ -110,6 +137,8 @@ async function show(client) {
 
   showOnly(els.library);
   els.householdTitle.textContent = household.name;
+  // Bara ägare kan bjuda in – policyn säger det, och knappen ska säga samma sak.
+  els.invite.hidden = household.role !== 'owner';
   await fetchRecipes(client);
 }
 
@@ -135,6 +164,46 @@ async function fetchRecipes(client) {
   renderMeta();
   renderFilters();
   renderRecipes();
+}
+
+/**
+ * Löser in inbjudan och städar bort den ur adressen.
+ *
+ * Inlösen går via en security definer-funktion i databasen: den som löser in
+ * är per definition inte medlem ännu och kan varken läsa inbjudningsraden
+ * eller skriva sig in i hushållet på egen hand.
+ */
+async function lösIn(client) {
+  setStatus('Löser in inbjudan …');
+  try {
+    await client.rest('rpc/redeem_household_invite', {
+      method: 'POST',
+      body: { invite_token: inbjudan },
+    });
+    setStatus('Du är med i hushållet.', 'ok');
+  } catch (err) {
+    setStatus(describe(err), 'error');
+  } finally {
+    // Bort ur adressen oavsett utfall. En förbrukad länk ska inte lösas in
+    // igen vid varje omladdning, och ett misslyckande inte upprepas i tysthet.
+    history.replaceState(null, '', location.pathname);
+  }
+}
+
+async function skapaInbjudan(client) {
+  setStatus('Skapar länk …');
+  els.inviteCreate.disabled = true;
+
+  try {
+    // Token sätts av databasens default, inte av klienten.
+    const [ny] = await client.insert('household_invites', { household_id: household.id });
+    els.inviteLink.value = `${location.origin}/?invite=${ny.token}`;
+    els.inviteResult.hidden = false;
+    els.inviteCopy.textContent = 'Kopiera';
+    setStatus('Länken gäller i sju dagar och kan lösas in en gång.', 'ok');
+  } finally {
+    els.inviteCreate.disabled = false;
+  }
 }
 
 const tagsOf = (recipe) => (recipe.recipe_tags ?? []).map((row) => row.tags).filter(Boolean);

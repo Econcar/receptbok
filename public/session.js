@@ -20,7 +20,7 @@ const els = {
 
 export function setStatus(text, tone) {
   const el = els.status();
-  if (!el) return;
+  if (!el || text === undefined) return; // Annars står det "undefined" på sidan.
   el.textContent = text;
   if (tone) el.dataset.tone = tone;
   else delete el.dataset.tone;
