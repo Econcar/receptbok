@@ -60,13 +60,14 @@ recipes (
   id, household_id, created_by,
   title, source_url, source_name, image_url,
   servings, total_time_min, instructions, notes,
+  source_ldjson,               -- hela blocket sajten publicerade
   created_at, updated_at
 )
 
 recipe_ingredients (
   id, recipe_id, position,
   raw_text,                    -- "2 dl vispgrädde" – alltid sparad
-  quantity, unit, ingredient_id, note
+  quantity, unit, note         -- ingredient_id tillkommer i fas 4
 )
 
 ingredients (id, canonical_name, category)          -- "grädde", "mejeri"
@@ -146,8 +147,7 @@ ingrediens är tolkad.
 
 ## 10. Öppna beslut
 
-- **Namn på projektet.** Repot heter fortfarande `leasing-scanner`. Kandidater:
-  `receptbok`, `skafferi`, `kokboken`.
+- ~~**Namn på projektet.**~~ Avgjort: `receptbok`. Repot är omdöpt.
 - **Bilder:** spara i Supabase Storage eller bara länka till källan? Länk är gratis och
   upphovsrättsligt enklare, men bilden försvinner när källan gör det.
 - **Offline:** bara läsa, eller även redigera med synk efteråt? Redigering offline betyder

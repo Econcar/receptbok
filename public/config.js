@@ -3,5 +3,5 @@
 export const SUPABASE_URL = '';
 export const SUPABASE_ANON_KEY = '';
 
-// Antal annonser som hämtas per sidladdning.
+// Antal recept som hämtas per sidladdning.
 export const PAGE_SIZE = 100;

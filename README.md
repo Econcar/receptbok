@@ -29,7 +29,7 @@ public/              Statisk frontend (Cloudflare Pages root)
 functions/api/       Pages Functions, en fil per endpoint
 lib/                 Delad logik: ld+json-läsning, HTTP. Inga Node-API:er –
                      koden ska kunna köras både i Node och på Workers
-db/                  SQL-schema för Supabase
+db/                  SQL-schema för Supabase + RLS-testet
 tests/               node --test
 scripts/             Pre-deploy-spärr m.m.
 docs/                Projektdokumentation
@@ -61,8 +61,12 @@ skyddas av RLS):
 
 ## Uppsättning
 
-1. **Supabase:** projekt → SQL Editor → kör [db/schema.sql](db/schema.sql).
-   Aktivera Google som auth-provider.
+1. **Supabase:** projekt → SQL Editor → kör [db/schema.sql](db/schema.sql), och därefter
+   [db/rls-test.sql](db/rls-test.sql) som ska sluta med *RLS-testet gick igenom*. Testet
+   rullar tillbaka sig självt och lämnar inga spår. Aktivera Google som auth-provider.
+
+   Återanvänds leasingprojektets Supabase-projekt körs [db/drop-leasing.sql](db/drop-leasing.sql)
+   först – en gång, medvetet, den raderar de gamla annonserna för gott.
 2. **Cloudflare Pages:** projekt kopplat till repot. Build command: *(tomt)*.
    Build output directory: `public`. Functions hittas automatiskt i `functions/`.
 3. Fyll i `public/config.js`. Sidan visar själv om kopplingen fungerar.
@@ -76,7 +80,7 @@ innehålla `/rest/v1/`.
 
 - [x] Stommen: PWA-skal, Pages Functions, pre-deploy-spärr, CI
 - [x] `lib/ldjson.mjs` – läser schema.org-data ur en sida (grunden för receptimporten)
-- [ ] Fas 1: schema, Google-inloggning, hushåll
+- [ ] Fas 1: schema ✔, Google-inloggning, hushåll i gränssnittet
 - [ ] Fas 2: import från länk + manuell inmatning
 - [ ] Fas 3: kökläget – sök, receptvy, offline
 - [ ] Fas 4: ingredienstolkning
