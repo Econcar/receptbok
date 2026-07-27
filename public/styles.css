@@ -116,6 +116,29 @@ body {
 .libraryhead p { margin: 0.2rem 0 0; font-size: 0.9rem; }
 .libraryhead a.button { text-decoration: none; }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.search {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
 
 .chip {
@@ -190,11 +213,35 @@ body {
 
 .card summary::marker { color: var(--muted); }
 
+/* Köksläsbarhet: ett utfällt recept läses på armlängds avstånd, ofta med
+   mjöliga händer. Större text och träffytor som tål en tumme. */
 .ingredients, .steps { margin: 0.75rem 0; padding-left: 1.25rem; }
 .ingredients { list-style: none; padding-left: 0; }
-.ingredients li { padding: 0.15rem 0; border-bottom: 1px solid var(--line); }
+.ingredients li { border-bottom: 1px solid var(--line); }
 .ingredients li:last-child { border-bottom: 0; }
-.steps li { padding: 0.2rem 0; }
+
+.ingredients label {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  padding: 0.55rem 0.2rem;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.ingredients input[type="checkbox"] {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Avbockat tonas ner i stället för att försvinna – man vill kunna se att man
+   faktiskt tagit ingrediensen, inte bara att raden är borta. */
+.ingredients label:has(input:checked) { color: var(--muted); text-decoration: line-through; }
+
+.steps li { padding: 0.35rem 0; font-size: 1.05rem; line-height: 1.6; }
 
 .badge {
   justify-self: start;

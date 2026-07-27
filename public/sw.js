@@ -1,6 +1,6 @@
 // Enkel service worker: precache av skalet, network-first för API, cache-first för statiskt.
 // Höj CACHE_VERSION när skalet ändras.
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const DATA_CACHE = `data-${CACHE_VERSION}`;
 
@@ -14,6 +14,9 @@ const SHELL = [
   '/session.js',
   '/supabase.js',
   '/lang.js',
+  '/search.js',
+  '/store.js',
+  '/kitchen.js',
   '/config.js',
   '/manifest.webmanifest',
   '/icons/icon-192.png',

@@ -151,8 +151,9 @@ ingrediens är tolkad.
 - ~~**Bilder:**~~ Avgjort: länk till källan. Gratis, upphovsrättsligt enklare, och
   försvinner bilden krymper kortet i stället för att visa en trasig ikon. Blir det
   ett problem i praktiken är Supabase Storage kvar som möjlighet.
-- **Offline:** bara läsa, eller även redigera med synk efteråt? Redigering offline betyder
-  konflikthantering – betydligt mer arbete.
+- ~~**Offline:**~~ Avgjort: bara läsa. Redigering offline hade krävt konflikthantering –
+  två personer som ändrar samma recept utan nät – och det är ett gränsfall i ett hushåll.
+  Recepten sparas lokalt vid varje lyckad hämtning och visas därifrån när nätet saknas.
 - **Inköpslistan:** gruppera per butiksavdelning (mejeri, grönt, torrvaror)? Kräver att
   `ingredients.category` fylls i noggrant.
 - **Hushållsinbjudan:** delbar länk eller inmatad e-postadress?
