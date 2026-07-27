@@ -138,3 +138,10 @@ test('entiteter avkodas, inklusive de som betyder mat', () => {
   assert.equal(decodeEntities('&amp;auml;'), '&auml;', 'ett svep, inte flera');
   assert.equal(decodeEntities('&okand;'), '&okand;', 'okända entiteter lämnas i fred');
 });
+
+test('engelska recept har sina egna tecken', () => {
+  assert.equal(decodeEntities('don&rsquo;t overmix'), 'don’t overmix');
+  assert.equal(decodeEntities('&frac13; cup'), '⅓ cup');
+  assert.equal(decodeEntities('2 &times; 400g tins'), '2 × 400g tins');
+  assert.equal(decodeEntities('&ldquo;soft peaks&rdquo;'), '“soft peaks”');
+});
