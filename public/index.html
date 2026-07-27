@@ -15,10 +15,39 @@
 <header class="topbar">
   <h1>Receptbok</h1>
   <p class="tagline">Hushållets receptsamling – laga efter dem, handla till dem.</p>
+  <div class="account" id="account" hidden>
+    <span id="account-name"></span>
+    <button type="button" id="signout" class="linkbutton">Logga ut</button>
+  </div>
 </header>
 
 <main>
   <p id="status" class="status" role="status">Kontrollerar …</p>
+
+  <section class="panel" id="signin" hidden>
+    <h2>Logga in</h2>
+    <p>Samlingen är hushållets och kräver inloggning. Recepten är bara synliga
+      för dem som hör till samma hushåll.</p>
+    <button type="button" id="signin-button" class="button">Logga in med Google</button>
+  </section>
+
+  <section class="panel" id="household-setup" hidden>
+    <h2>Skapa ditt hushåll</h2>
+    <p>Ett hushåll samlar recepten. Du blir ägare och kan bjuda in resten av
+      familjen senare.</p>
+    <form class="form" id="household-form">
+      <label for="household-name">Namn på hushållet</label>
+      <input type="text" id="household-name" maxlength="60" required
+             autocomplete="off" placeholder="Familjen Carlsson">
+      <button type="submit" class="button">Skapa hushåll</button>
+    </form>
+  </section>
+
+  <section class="panel" id="household" hidden>
+    <h2 id="household-title"></h2>
+    <p id="household-meta" class="muted"></p>
+  </section>
+
   <ul id="results" class="results"></ul>
 </main>
 

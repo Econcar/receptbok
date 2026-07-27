@@ -1,14 +1,28 @@
-// Skalet. Recepten själva hör till fas 2–3 i docs/projektstart.md.
+// Fas 1: inloggning och hushåll. Recepten själva hör till fas 2–3 i
+// docs/projektstart.md.
 //
-// Det den gör i dag är att svara på en enda fråga: är sajten korrekt utrullad
-// och kopplad till rätt Supabase-projekt? Det är värt en sida i sig – det var
-// just den kopplingen som kostade mest tid i förra projektet.
+// Sidan har tre lägen och visar exakt ett i taget: utloggad, inloggad utan
+// hushåll, inloggad med hushåll. Statusraden säger alltid vad som gäller –
+// det var tystnaden kring kopplingen till Supabase som kostade mest tid i
+// förra projektet.
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '/config.js';
+import { createClient, RestError } from '/supabase.js';
 
 const els = {
   status: document.getElementById('status'),
   meta: document.getElementById('meta'),
+  account: document.getElementById('account'),
+  accountName: document.getElementById('account-name'),
+  signOut: document.getElementById('signout'),
+  signIn: document.getElementById('signin'),
+  signInButton: document.getElementById('signin-button'),
+  setup: document.getElementById('household-setup'),
+  setupForm: document.getElementById('household-form'),
+  setupName: document.getElementById('household-name'),
+  household: document.getElementById('household'),
+  householdTitle: document.getElementById('household-title'),
+  householdMeta: document.getElementById('household-meta'),
 };
 
 function setStatus(text, tone) {
@@ -17,25 +31,10 @@ function setStatus(text, tone) {
   else delete els.status.dataset.tone;
 }
 
-async function checkConnection() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    setStatus('Sajten är utrullad, men public/config.js är inte ifylld ännu.', 'warn');
-    return;
-  }
-
-  try {
-    // Vilken endpoint som helst duger – vi vill bara veta att URL och nyckel
-    // hör ihop. PostgREST-roten svarar utan att någon tabell behöver finnas.
-    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/`, {
-      headers: { apikey: SUPABASE_ANON_KEY },
-    });
-    if (res.ok) {
-      setStatus('Ansluten till Supabase. Inga recept ännu – fas 2 i projektstart.md.', 'ok');
-    } else {
-      setStatus(`Supabase svarade ${res.status}. Kontrollera URL och anon-nyckel i config.js.`, 'warn');
-    }
-  } catch (err) {
-    setStatus(`Kunde inte nå Supabase: ${err.message}`, 'warn');
+/** Ett läge i taget – annars blinkar två paneler förbi under laddningen. */
+function showOnly(section) {
+  for (const candidate of [els.signIn, els.setup, els.household]) {
+    candidate.hidden = candidate !== section;
   }
 }
 
@@ -46,4 +45,92 @@ if ('serviceWorker' in navigator) {
 }
 
 els.meta.textContent = 'Receptbok · fas 1';
-checkConnection();
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  setStatus('Sajten är utrullad, men public/config.js är inte ifylld ännu.', 'warn');
+} else {
+  start().catch((err) => setStatus(describe(err), 'error'));
+}
+
+async function start() {
+  const client = createClient({ url: SUPABASE_URL, key: SUPABASE_ANON_KEY });
+
+  // Efter återkomsten från Google ligger resultatet i adressens fragment.
+  const { error } = client.consumeRedirect();
+  if (error) setStatus(`Inloggningen avbröts: ${error}`, 'error');
+
+  els.signInButton.addEventListener('click', () => client.signIn());
+  els.signOut.addEventListener('click', async () => {
+    await client.signOut();
+    location.reload();
+  });
+
+  const session = await client.getSession();
+  if (!session) {
+    els.account.hidden = true;
+    showOnly(els.signIn);
+    if (!error) setStatus('Inte inloggad.');
+    return;
+  }
+
+  const user = client.user;
+  els.accountName.textContent = user?.email ?? 'Inloggad';
+  els.account.hidden = false;
+
+  els.setupForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    createHousehold(client, user).catch((err) => setStatus(describe(err), 'error'));
+  });
+
+  await loadHousehold(client, user);
+}
+
+async function loadHousehold(client, user) {
+  setStatus('Hämtar hushåll …');
+
+  // Ett anrop räcker: RLS ser till att bara egna medlemskap kommer tillbaka,
+  // och hushållsraden följer med inbäddad via främmande nyckeln.
+  const memberships = await client.rest(
+    'household_members?select=role,households(id,name)',
+  );
+
+  if (!memberships.length) {
+    showOnly(els.setup);
+    setStatus('Du hör inte till något hushåll ännu.');
+    return;
+  }
+
+  const { households: household, role } = memberships[0];
+  const roleName = role === 'owner' ? 'ägare' : 'medlem';
+
+  showOnly(els.household);
+  els.householdTitle.textContent = household.name;
+
+  const recipes = await client.rest(`recipes?select=id&household_id=eq.${household.id}`);
+  els.householdMeta.textContent = recipes.length === 0
+    ? `Du är ${roleName}. Inga recept ännu – importen kommer i fas 2.`
+    : `Du är ${roleName}. ${recipes.length} recept.`;
+
+  setStatus('Ansluten.', 'ok');
+}
+
+async function createHousehold(client, user) {
+  const name = els.setupName.value.trim();
+  if (!name) return;
+
+  setStatus('Skapar hushåll …');
+  // created_by måste vara den inloggade: policyn "vem som helst skapar ett
+  // hushåll" kräver det, och triggern gör samma användare till ägare.
+  await client.insert('households', { name, created_by: user.sub });
+  await loadHousehold(client, user);
+}
+
+function describe(err) {
+  if (err instanceof RestError && err.status === 401) {
+    return 'Supabase avvisade nyckeln (401). Kontrollera anon-nyckeln i config.js.';
+  }
+  if (err instanceof RestError) {
+    return `Supabase svarade ${err.status}: ${err.message}`;
+  }
+  return `Något gick fel: ${err.message}`;
+}

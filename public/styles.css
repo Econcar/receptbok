@@ -23,28 +23,44 @@ body {
 .topbar h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
 .tagline { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
 
-.filters {
-  display: grid;
+.account {
+  display: flex;
+  align-items: baseline;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  padding: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status { margin: 1rem 0 0.5rem; color: var(--muted); font-size: 0.9rem; }
+.status[data-tone="error"] { color: #fca5a5; }
+.status[data-tone="warn"] { color: #fcd34d; }
+.status[data-tone="ok"] { color: var(--good); }
+
+.panel {
+  padding: 1.25rem;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
 
-.filters label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.panel h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.panel p { margin: 0 0 1rem; color: var(--muted); font-size: 0.9rem; }
+.panel p:last-child { margin-bottom: 0; }
+.muted { color: var(--muted); }
+
+.form { display: grid; gap: 0.5rem; justify-items: start; }
+
+.form label {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
 
-.filters input,
-.filters select {
+.form input {
+  width: 100%;
+  max-width: 22rem;
   padding: 0.5rem 0.6rem;
   font: inherit;
   color: var(--text);
@@ -53,11 +69,32 @@ body {
   border-radius: 8px;
 }
 
-.filters input:focus-visible,
-.filters select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.button {
+  padding: 0.55rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
 
-.status { margin: 1rem 0 0.5rem; color: var(--muted); font-size: 0.9rem; }
-.status[data-tone="error"] { color: #fca5a5; }
+.button:hover { filter: brightness(1.1); }
+
+.linkbutton {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.form input:focus-visible,
+.button:focus-visible,
+.linkbutton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .results { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
 
@@ -72,8 +109,7 @@ body {
 
 .card a { color: var(--text); text-decoration: none; font-weight: 600; }
 .card a:hover { color: var(--accent); }
-.card .price { font-size: 1.15rem; font-weight: 700; }
-.card .terms, .card .source { color: var(--muted); font-size: 0.85rem; }
+.card .source { color: var(--muted); font-size: 0.85rem; }
 
 .badge {
   justify-self: start;
