@@ -80,7 +80,7 @@ innehålla `/rest/v1/`.
 
 - [x] Stommen: PWA-skal, Pages Functions, pre-deploy-spärr, CI
 - [x] `lib/ldjson.mjs` – läser schema.org-data ur en sida (grunden för receptimporten)
-- [ ] Fas 1: schema ✔, Google-inloggning, hushåll i gränssnittet
+- [x] Fas 1: schema, Google-inloggning, hushåll – RLS bevisad med `db/rls-test.sql`
 - [ ] Fas 2: import från länk + manuell inmatning
 - [ ] Fas 3: kökläget – sök, receptvy, offline
 - [ ] Fas 4: ingredienstolkning
