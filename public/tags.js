@@ -31,15 +31,22 @@ export async function upsertTags(client, householdId, namn) {
 }
 
 /**
- * Vad som ska visas som valbara kategorier: hushållets egna först, sedan
- * förslagen som inte redan finns. Utan hushållets egna skulle en kategori man
- * hittat på försvinna ur förslagen nästa gång, och man fick skriva den igen.
+ * Vilka kategorier som ska visas som valbara.
+ *
+ * `medFörslag` skiljer de två platserna åt, och skillnaden är inte kosmetisk.
+ * Förslagen finns inte i databasen förrän någon använder dem, och går alltså
+ * inte att ta bort. På inmatningssidan är det rimligt – där väljer man, och en
+ * startlista hjälper ett tomt hushåll igång.
+ *
+ * I receptvyn är det däremot fel: där redigerar man, och allt som syns ska gå
+ * att bli av med. Tolv oborttagbara förslag på varje recept är skräp man inte
+ * kan städa. Behövs en ny kategori finns fältet bredvid.
  */
-export function valbara(hushålletsTags, valda = []) {
+export function valbara(hushålletsTags, valda = [], { medFörslag = true } = {}) {
   const alla = new Set([
     ...hushålletsTags.map((tag) => normalizeTag(tag.name)),
     ...valda.map(normalizeTag),
-    ...FÖRSLAG,
+    ...(medFörslag ? FÖRSLAG : []),
   ]);
   return [...alla].filter(Boolean).sort((a, b) => a.localeCompare(b, 'sv'));
 }

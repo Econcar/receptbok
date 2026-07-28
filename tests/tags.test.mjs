@@ -27,6 +27,22 @@ test('förslagen finns kvar för ett tomt hushåll', () => {
   for (const förslag of FÖRSLAG) assert.ok(lista.includes(förslag), förslag);
 });
 
+test('utan förslag visas bara det som går att ta bort', () => {
+  // I receptvyn redigerar man, och allt som syns ska gå att städa bort i
+  // hanteringsvyn. Förslagen finns inte i databasen förrän någon använder dem
+  // och kan alltså inte tas bort – tolv oborttagbara chips på varje recept.
+  const lista = valbara([tag('gratäng')], ['middag'], { medFörslag: false });
+
+  assert.deepEqual(lista, ['gratäng', 'middag']);
+  assert.ok(!lista.includes('frukost'), 'oanvänt förslag ska inte visas');
+});
+
+test('en vald kategori följer med även utan förslag', () => {
+  // Ett recept kan bära en kategori vars rad hunnit tas bort. Den ska synas
+  // som vald och gå att klicka bort, inte försvinna ur vyn.
+  assert.deepEqual(valbara([], ['middag'], { medFörslag: false }), ['middag']);
+});
+
 test('en kategori som både finns och föreslås visas en gång', () => {
   const lista = valbara([tag('middag')]);
   assert.equal(lista.filter((n) => n === 'middag').length, 1);

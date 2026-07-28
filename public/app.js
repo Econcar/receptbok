@@ -558,7 +558,12 @@ function kategoriRad(recipe) {
   const rita = () => {
     const valda = new Set(tagsOf(recipe).map((tag) => normalizeTag(tag.name)));
 
-    bar.replaceChildren(...valbara(hushålletsTags, [...valda]).map((name) => {
+    // Utan förslagen: här redigerar man, och allt som syns ska gå att ta bort
+    // i hanteringsvyn. Förslagen finns inte i databasen och kan alltså inte
+    // städas bort – de hör hemma på inmatningssidan, där man väljer.
+    const namn = valbara(hushålletsTags, [...valda], { medFörslag: false });
+
+    bar.replaceChildren(...namn.map((name) => {
       const knapp = chip(name, valda.has(name), guard(() => växlaTag(recipe, name, rita)));
       knapp.classList.add('chip-liten');
       return knapp;
