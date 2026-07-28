@@ -576,7 +576,7 @@ async function läggIInköpslista(recipe, faktor) {
  * hast och kategoriseras när man har lust. Att behöva mata in receptet på nytt
  * för att lägga till "middag" hade betytt att ingen gjorde det.
  *
- * Här går det bara att kryssa i och ur. Nya kategorier skapas på /kategorier
+ * Här går det bara att kryssa i och ur. Nya kategorier skapas under Inställningar
  * och tas bort där. Att bestämma vilka kategorier som finns gör man sällan och
  * eftertänksamt; att kryssa i dem gör man ofta och i förbifarten.
  */
@@ -619,10 +619,10 @@ async function växlaTag(recipe, name, rita) {
   } else {
     // Kategorin måste finnas sedan tidigare. Den här vyn kopplar bara ihop –
     // att den kunde skapa nya bakvägen vore att kringgå regeln om att
-    // kategorier bestäms på /kategorier.
+    // kategorier bestäms under Inställningar.
     const tag = hushålletsTags.find((t) => normalizeTag(t.name) === name);
     if (!tag) {
-      setStatus(`Kategorin ${name} finns inte längre. Skapa den under Hantera kategorier.`, 'warn');
+      setStatus(`Kategorin ${name} finns inte längre. Skapa den under Inställningar.`, 'warn');
       return;
     }
 

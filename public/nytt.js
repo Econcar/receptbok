@@ -37,7 +37,7 @@ let client = null;
 /** Det importen läste men formuläret inte visar. Följer med till databasen. */
 let pending = { source_name: null, source_ldjson: null };
 let chosen = new Set();
-/** Hushållets kategorier. Nya skapas på /kategorier, inte här. */
+/** Hushållets kategorier. Nya skapas under Inställningar, inte här. */
 let hushålletsTags = [];
 
 registerServiceWorker();
@@ -94,7 +94,7 @@ async function start() {
 function renderChips() {
   els.tagHint.textContent = hushålletsTags.length
     ? ''
-    : 'Inga kategorier ännu. Skapa dem under Hantera kategorier på startsidan.';
+    : 'Inga kategorier ännu. Skapa dem under Inställningar.';
 
   els.chips.replaceChildren(...valbara(hushålletsTags, [...chosen]).map((name) => {
     const button = document.createElement('button');

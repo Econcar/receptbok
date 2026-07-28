@@ -182,6 +182,15 @@ create table if not exists public.shopping_list_items (
   unique (household_id, name, unit, source)
 );
 
+-- En bortplockad rad. Behövs för att planens rader inte går att radera som de
+-- handtillagda gör – de räknas fram ur veckoplanen, och att ta bort dem där
+-- vore att ändra vad man tänkt laga bara för att man redan har mjöl hemma.
+--
+-- Därför en markering i stället: raden räknas fortfarande fram men visas inte.
+-- Den går att återställa, så ingenting försvinner tyst och för gott.
+alter table public.shopping_list_items
+  add column if not exists hidden boolean not null default false;
+
 create index if not exists shopping_list_household_idx
   on public.shopping_list_items (household_id);
 

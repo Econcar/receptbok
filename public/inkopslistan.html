@@ -39,8 +39,17 @@
       <button type="submit" class="button">Lägg till</button>
     </form>
 
-    <p class="muted">
-      <button type="button" class="linkbutton" id="clear-checked">Rensa avbockade</button>
+    <section id="done-section" hidden>
+      <h2 class="sectionhead">Redan inhandlat</h2>
+      <ul id="done" class="shopping inhandlat"></ul>
+      <p class="muted">
+        <button type="button" class="linkbutton" id="clear-checked">Rensa inhandlat</button>
+      </p>
+    </section>
+
+    <p class="muted" id="hidden-note" hidden>
+      <span id="hidden-count"></span>
+      <button type="button" class="linkbutton" id="restore-hidden">Återställ</button>
     </p>
   </div>
 </main>

@@ -23,7 +23,12 @@ const els = {
   list: document.getElementById('list'),
   itemForm: document.getElementById('item-form'),
   newItem: document.getElementById('new-item'),
+  doneSection: document.getElementById('done-section'),
+  done: document.getElementById('done'),
   clearChecked: document.getElementById('clear-checked'),
+  hiddenNote: document.getElementById('hidden-note'),
+  hiddenCount: document.getElementById('hidden-count'),
+  restoreHidden: document.getElementById('restore-hidden'),
 };
 
 let client = null;
@@ -74,7 +79,8 @@ async function start() {
     return läggTillEgen();
   }));
 
-  els.clearChecked.addEventListener('click', guard(() => rensaAvbockade()));
+  els.clearChecked.addEventListener('click', guard(() => rensaInhandlat()));
+  els.restoreHidden.addEventListener('click', guard(() => återställDolda()));
 
   await ladda();
 }
@@ -129,83 +135,97 @@ function render() {
     egnaRader(),
   );
 
-  const bockar = new Map(
+  const märken = new Map(
     sparade.filter((rad) => rad.source === 'plan')
       .map((rad) => [bockNyckel(rad.name, rad.unit), rad]),
   );
+  const märke = (post) => märken.get(bockNyckel(post.name, post.unit));
+
+  // Bortplockade rader räknas fortfarande fram men visas inte. De försvinner
+  // alltså inte tyst: raden längst ner säger hur många de är och tar tillbaka dem.
+  const synliga = uträknad.filter((post) => !märke(post)?.hidden);
+  const dolda = uträknad.length - synliga.length;
+
+  const attHandla = synliga.filter((post) => !märke(post)?.checked);
+  const inhandlat = synliga.filter((post) => märke(post)?.checked);
 
   const kategoriFör = (post) => {
     const namn = normalizeName(post.name);
     return varor.find((vara) => vara.name === namn)?.category ?? null;
   };
 
-  els.list.replaceChildren(...groupByCategory(uträknad, kategoriFör).flatMap((grupp) => {
+  els.list.replaceChildren(...groupByCategory(attHandla, kategoriFör).flatMap((grupp) => {
     const rubrik = document.createElement('li');
     rubrik.className = 'avdelning';
     rubrik.textContent = grupp.namn;
-    return [rubrik, ...grupp.items.map(
-      (post) => listrad(post, bockar.get(bockNyckel(post.name, post.unit))),
-    )];
+    return [rubrik, ...grupp.items.map((post) => listrad(post, märke(post)))];
   }));
 
-  const kvar = uträknad.filter((post) => !bockar.get(bockNyckel(post.name, post.unit))?.checked);
-  const ungefärliga = uträknad.filter((post) => post.approximate).length;
+  // Inhandlat grupperas inte per avdelning. Där är man färdig, och avdelningen
+  // säger bara något om var i butiken man skulle ha gått.
+  els.doneSection.hidden = inhandlat.length === 0;
+  els.done.replaceChildren(...inhandlat.map((post) => listrad(post, märke(post))));
+
+  els.hiddenNote.hidden = dolda === 0;
+  els.hiddenCount.textContent = dolda === 1
+    ? '1 vara är bortplockad. '
+    : `${dolda} varor är bortplockade. `;
 
   const delar = [];
-  if (uträknad.length) delar.push(`${kvar.length} av ${uträknad.length} kvar`);
+  if (synliga.length) delar.push(`${attHandla.length} av ${synliga.length} kvar`);
+  const ungefärliga = attHandla.filter((post) => post.approximate).length;
   if (ungefärliga) delar.push(`${ungefärliga} ungefärliga – skalade portioner följer inte kryddmåtten`);
 
-  els.meta.textContent = uträknad.length
+  els.meta.textContent = synliga.length
     ? delar.join(' · ')
     : 'Listan fylls av veckoplanen och av det du lägger till själv.';
 }
 
-function listrad(post, bock) {
+function listrad(post, märke) {
   const li = document.createElement('li');
   const label = document.createElement('label');
 
   const box = document.createElement('input');
   box.type = 'checkbox';
-  box.checked = Boolean(bock?.checked);
+  box.checked = Boolean(märke?.checked);
   box.addEventListener('change', guard(() => bocka(post, box.checked)));
 
   const text = document.createElement('span');
   text.textContent = formatItem(post);
   label.append(box, text);
 
-  if (post.approximate) {
-    const flagga = document.createElement('span');
-    flagga.className = 'tag';
-    flagga.textContent = 'ca';
-    flagga.title = 'Mängden är skalad efter portioner och är ungefärlig';
-    label.append(flagga);
+  // Härkomst, avdelning och ca-flagga hör till handlandet. Ligger varan redan
+  // i kundvagnen är de bara brus.
+  if (!märke?.checked) {
+    if (post.approximate) {
+      const flagga = document.createElement('span');
+      flagga.className = 'tag';
+      flagga.textContent = 'ca';
+      flagga.title = 'Mängden är skalad efter portioner och är ungefärlig';
+      label.append(flagga);
+    }
+    label.append(kategoriväljare(post.name));
   }
 
-  label.append(kategoriväljare(post.name));
   li.append(label);
 
-  const härkomst = [...post.recipes];
-  if (post.manuellt) härkomst.push('tillagt själv');
-
-  if (härkomst.length) {
-    const källa = document.createElement('p');
-    källa.className = 'source';
-    källa.textContent = härkomst.join(', ');
-    li.append(källa);
+  if (!märke?.checked) {
+    const härkomst = [...post.recipes];
+    if (post.manuellt) härkomst.push('tillagt själv');
+    if (härkomst.length) {
+      const källa = document.createElement('p');
+      källa.className = 'source';
+      källa.textContent = härkomst.join(', ');
+      li.append(källa);
+    }
   }
 
-  // Bara det man lagt till själv går att ta bort. Planens rader tas bort genom
-  // att rätten plockas ur veckan – annars hade listan och planen kunnat säga
-  // emot varandra.
-  const egen = egnaRader().find((rad) => bockNyckel(rad.name, rad.unit) === bockNyckel(post.name, post.unit));
-  if (egen) {
-    const bort = document.createElement('button');
-    bort.type = 'button';
-    bort.className = 'linkbutton';
-    bort.textContent = 'Ta bort';
-    bort.addEventListener('click', guard(() => taBortEgen(egen)));
-    li.append(bort);
-  }
+  const bort = document.createElement('button');
+  bort.type = 'button';
+  bort.className = 'linkbutton';
+  bort.textContent = 'Ta bort';
+  bort.addEventListener('click', guard(() => taBort(post)));
+  li.append(bort);
 
   return li;
 }
@@ -243,8 +263,23 @@ async function sättKategori(namn, category) {
   render();
 }
 
-async function bocka(post, checked) {
-  if (!checked) {
+/**
+ * Skriver bock- och bortplocksmärket för en rad.
+ *
+ * Båda bor på samma rad med source='plan', keyad på namn och enhet – samma
+ * nyckel som sammanslagningen använder. Är varken bocken eller bortplocket
+ * satt tas raden bort helt, så tabellen inte fylls av tomma märken.
+ */
+async function sättMärke(post, ändring) {
+  const nyckel = bockNyckel(post.name, post.unit);
+  const nuvarande = sparade.find(
+    (rad) => rad.source === 'plan' && bockNyckel(rad.name, rad.unit) === nyckel,
+  );
+
+  const checked = ändring.checked ?? nuvarande?.checked ?? false;
+  const hidden = ändring.hidden ?? nuvarande?.hidden ?? false;
+
+  if (!checked && !hidden) {
     await client.rest(
       `shopping_list_items?household_id=eq.${household.id}&source=eq.plan`
       + `&name=eq.${encodeURIComponent(post.name)}`
@@ -259,7 +294,8 @@ async function bocka(post, checked) {
         name: post.name,
         unit: post.unit,
         quantity: post.quantity,
-        checked: true,
+        checked,
+        hidden,
         source: 'plan',
       },
       headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
@@ -267,6 +303,34 @@ async function bocka(post, checked) {
   }
 
   sparade = await client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`);
+}
+
+/** Kryssa i flyttar varan till Redan inhandlat, kryssa ur flyttar den tillbaka. */
+async function bocka(post, checked) {
+  await sättMärke(post, { checked });
+  render();
+}
+
+/**
+ * Tar bort raden ur båda listorna.
+ *
+ * Två saker samtidigt, för en rad kan bestå av båda sorterna: det handtillagda
+ * bidraget raderas, och raden märks som bortplockad så att planens del slutar
+ * visas. Att i stället plocka rätten ur veckan hade ändrat vad man tänkt laga
+ * bara för att man redan har mjöl hemma.
+ */
+async function taBort(post) {
+  const nyckel = bockNyckel(post.name, post.unit);
+
+  for (const egen of egnaRader()) {
+    if (bockNyckel(egen.name, egen.unit) !== nyckel) continue;
+    await client.rest(`shopping_list_items?id=eq.${egen.id}`, {
+      method: 'DELETE', headers: { prefer: 'return=minimal' },
+    });
+  }
+
+  sparade = await client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`);
+  await sättMärke(post, { hidden: true, checked: false });
   render();
 }
 
@@ -284,28 +348,21 @@ async function läggTillEgen() {
   await ladda();
 }
 
-async function taBortEgen(rad) {
-  await client.rest(`shopping_list_items?id=eq.${rad.id}`, {
-    method: 'DELETE',
-    headers: { prefer: 'return=minimal' },
-  });
-  await ladda();
-}
-
 /**
- * Tar bort bockarna och de handtillagda rader som bockats av.
+ * Rensar det som är inhandlat.
  *
+ * Bockarna försvinner och de handtillagda rader som var avbockade raderas.
  * Planens rader står kvar – de kommer ur veckan och försvinner när rätten gör
- * det. Att rensa listan ska inte tyst ändra vad man planerat att laga.
+ * det. Att rensa listan ska inte tyst ändra vad man tänkt laga.
  */
-async function rensaAvbockade() {
+async function rensaInhandlat() {
   const bockade = sparade.filter((rad) => rad.source === 'plan' && rad.checked);
   if (!bockade.length) {
-    setStatus('Inget är avbockat.', 'warn');
+    setStatus('Inget är inhandlat än.', 'warn');
     return;
   }
 
-  if (!confirm(`Rensa ${bockade.length} avbockade rader? Veckoplanen rörs inte.`)) return;
+  if (!confirm(`Rensa ${bockade.length} inhandlade varor? Veckoplanen rörs inte.`)) return;
 
   setStatus('Rensar …');
   const nycklar = new Set(bockade.map((rad) => bockNyckel(rad.name, rad.unit)));
@@ -323,5 +380,20 @@ async function rensaAvbockade() {
   }
 
   await ladda();
-  setStatus('Avbockat rensat.', 'ok');
+  setStatus('Inhandlat rensat.', 'ok');
+}
+
+/** Tar tillbaka allt bortplockat. Inget ska försvinna för gott av ett klick. */
+async function återställDolda() {
+  await client.rest(
+    `shopping_list_items?household_id=eq.${household.id}&source=eq.plan&hidden=is.true`,
+    {
+      method: 'PATCH',
+      body: { hidden: false },
+      headers: { prefer: 'return=minimal' },
+    },
+  );
+
+  await ladda();
+  setStatus('Bortplockade varor är tillbaka.', 'ok');
 }

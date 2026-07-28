@@ -1,4 +1,4 @@
-// Hushållets receptkategorier: skapa och ta bort.
+// Inställningssidan. I dag bara receptkategorier – skapa, byt namn, ta bort.
 //
 // Egen sida med flit. Att bestämma vilka kategorier som finns är något man gör
 // sällan och eftertänksamt; att kryssa i dem på ett recept gör man ofta och i

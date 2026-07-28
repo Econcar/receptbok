@@ -448,3 +448,8 @@ body {
 .stjarna:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .card { position: relative; }
 .card .stjarna { position: absolute; top: 0.5rem; right: 0.6rem; }
+
+/* Redan inhandlat: överstruket och nedtonat, men fortfarande läsbart – man
+   vill kunna se vad man tagit, inte bara att raden är borta. */
+.inhandlat label { color: var(--muted); text-decoration: line-through; }
+.inhandlat li { border-bottom-color: transparent; }

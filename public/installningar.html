@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kategorier · Receptbok</title>
-<meta name="description" content="Hushållets receptkategorier – skapa, byt namn och ta bort.">
+<title>Inställningar · Receptbok</title>
+<meta name="description" content="Hushållets inställningar – receptkategorier och annat.">
 <meta name="theme-color" content="#0f172a">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png">
@@ -13,7 +13,7 @@
 </head>
 <body>
 <header class="topbar">
-  <h1>Kategorier</h1>
+  <h1>Inställningar</h1>
   <p class="tagline"><a href="/">← Tillbaka till recepten</a></p>
   <div class="account" id="account" hidden>
     <span id="account-name"></span>
@@ -28,9 +28,13 @@
     <p>Gå till <a href="/">startsidan</a> för att logga in och skapa ditt hushåll.</p>
   </section>
 
+  <!-- Ett avsnitt per inställning. Kategorierna är det första; fler ryms
+       under egna rubriker utan att sidan behöver byggas om. -->
   <div id="manager" hidden>
+    <h2 class="sectionhead">Receptkategorier</h2>
+
     <section class="panel">
-      <h2>Ny kategori</h2>
+      <h3>Ny kategori</h3>
       <form class="form" id="new-form">
         <label for="new-name">Namn</label>
         <input type="text" id="new-name" maxlength="40" required autocomplete="off"
@@ -41,10 +45,7 @@
         att fälla ut ett recept på startsidan och klicka i dem.</p>
     </section>
 
-    <section>
-      <h2 class="sectionhead">Hushållets kategorier</h2>
-      <ul id="list" class="tagadmin"></ul>
-    </section>
+    <ul id="list" class="tagadmin"></ul>
   </div>
 </main>
 
@@ -52,6 +53,6 @@
   <span id="meta"></span>
 </footer>
 
-<script type="module" src="/kategorier.js"></script>
+<script type="module" src="/installningar.js"></script>
 </body>
 </html>
