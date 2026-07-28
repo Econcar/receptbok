@@ -3,7 +3,7 @@
 // Måste vara samma sträng som VERSION i public/version.js – annars visar
 // sidfoten en annan version än den som faktiskt cachats. tests/version.test.mjs
 // ser till att de inte glider isär.
-const CACHE_VERSION = 'v17';
+const CACHE_VERSION = 'v18';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const DATA_CACHE = `data-${CACHE_VERSION}`;
 

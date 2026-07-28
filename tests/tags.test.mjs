@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FÖRSLAG, normalizeTag, upsertTags, valbara } from '../public/tags.js';
+import { normalizeTag, upsertTags, valbara } from '../public/tags.js';
 
 const tag = (name) => ({ id: `id-${name}`, name });
 
@@ -22,25 +22,18 @@ test('hushållets egna kategorier finns bland de valbara', () => {
   assert.ok(lista.includes('julmat'));
 });
 
-test('förslagen finns kvar för ett tomt hushåll', () => {
-  const lista = valbara([]);
-  for (const förslag of FÖRSLAG) assert.ok(lista.includes(förslag), förslag);
+test('ett tomt hushåll får inga kategorier på köpet', () => {
+  // Den fasta förslagslistan är borttagen. Den skapade en andra sort som såg
+  // ut som de andra men inte gick att radera, eftersom den inte fanns i
+  // databasen. Nu finns bara en sort, och allt som syns går att ta bort.
+  assert.deepEqual(valbara([]), []);
 });
 
-test('utan förslag visas bara det som går att ta bort', () => {
-  // I receptvyn redigerar man, och allt som syns ska gå att städa bort i
-  // hanteringsvyn. Förslagen finns inte i databasen förrän någon använder dem
-  // och kan alltså inte tas bort – tolv oborttagbara chips på varje recept.
-  const lista = valbara([tag('gratäng')], ['middag'], { medFörslag: false });
+test('bara hushållets egna visas', () => {
+  const lista = valbara([tag('gratäng')], ['middag']);
 
   assert.deepEqual(lista, ['gratäng', 'middag']);
-  assert.ok(!lista.includes('frukost'), 'oanvänt förslag ska inte visas');
-});
-
-test('en vald kategori följer med även utan förslag', () => {
-  // Ett recept kan bära en kategori vars rad hunnit tas bort. Den ska synas
-  // som vald och gå att klicka bort, inte försvinna ur vyn.
-  assert.deepEqual(valbara([], ['middag'], { medFörslag: false }), ['middag']);
+  assert.ok(!lista.includes('frukost'), 'inga påhittade kategorier');
 });
 
 test('en kategori som både finns och föreslås visas en gång', () => {

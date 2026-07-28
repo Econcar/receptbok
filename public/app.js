@@ -388,17 +388,18 @@ function renderTagAdmin() {
 }
 
 async function taBortTag(tag, antal) {
-  // En kategori som används försvinner från varje recept den satt på – det
-  // sköter främmande nyckeln med cascade. Att fråga först är därför inte
-  // artighet utan nödvändigt: det är inte uppenbart att en borttagning här
-  // ändrar recept man inte tittar på.
-  if (antal > 0) {
-    const svar = confirm(
-      `Ta bort kategorin "${tag.name}"? Den försvinner från ${antal} `
-      + `${antal === 1 ? 'recept' : 'recept'}. Recepten själva rörs inte.`,
-    );
-    if (!svar) return;
-  }
+  // Alltid en fråga, även för en oanvänd kategori. Borttagningen går inte att
+  // ångra, och "Ta bort" sitter bredvid fyra andra rader – en felträff ska
+  // inte kosta något.
+  //
+  // Texten säger vad som faktiskt händer: en använd kategori försvinner från
+  // varje recept den satt på, vilket främmande nyckelns cascade sköter. Det är
+  // inte uppenbart att en borttagning här ändrar recept man inte tittar på.
+  const följd = antal > 0
+    ? `Den försvinner från ${antal} recept. Recepten själva rörs inte.`
+    : 'Den används inte av något recept.';
+
+  if (!confirm(`Ta bort kategorin "${tag.name}"?\n\n${följd}`)) return;
 
   setStatus(`Tar bort kategorin ${tag.name} …`);
   await client.rest(`tags?id=eq.${tag.id}`, {
@@ -558,12 +559,7 @@ function kategoriRad(recipe) {
   const rita = () => {
     const valda = new Set(tagsOf(recipe).map((tag) => normalizeTag(tag.name)));
 
-    // Utan förslagen: här redigerar man, och allt som syns ska gå att ta bort
-    // i hanteringsvyn. Förslagen finns inte i databasen och kan alltså inte
-    // städas bort – de hör hemma på inmatningssidan, där man väljer.
-    const namn = valbara(hushålletsTags, [...valda], { medFörslag: false });
-
-    bar.replaceChildren(...namn.map((name) => {
+    bar.replaceChildren(...valbara(hushålletsTags, [...valda]).map((name) => {
       const knapp = chip(name, valda.has(name), guard(() => växlaTag(recipe, name, rita)));
       knapp.classList.add('chip-liten');
       return knapp;

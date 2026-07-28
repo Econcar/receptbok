@@ -5,11 +5,15 @@
 // koppla dem på samma sätt. Gemenformat är ett villkor i databasen – annars
 // blir "Vegetariskt" och "vegetariskt" två kategorier som ser likadana ut.
 
-/** Förslag för ett tomt hushåll. Bara en startpunkt; egna går alltid att skriva. */
-export const FÖRSLAG = [
-  'middag', 'frukost', 'lunch', 'vegetariskt', 'kött', 'fisk',
-  'soppa', 'pasta', 'sallad', 'bak', 'efterrätt', 'snabbt',
-];
+// Det fanns en fast förslagslista här: middag, frukost, vegetariskt och nio
+// till. Den togs bort, för den skapade en andra sorts kategori som såg ut som
+// de andra men inte gick att ta bort – den fanns inte i databasen förrän någon
+// använde den. "Varför kan jag radera soppa men inte vegetariskt?" är en fråga
+// gränssnittet inte kunde svara på.
+//
+// Nu finns bara en sort: rader hushållet självt skapat, och alla går att ta
+// bort. Ett tomt hushåll skriver sin första kategori i fältet, vilket är en
+// engångskostnad på tio sekunder.
 
 export const normalizeTag = (namn) => String(namn ?? '').trim().toLowerCase();
 
@@ -31,22 +35,17 @@ export async function upsertTags(client, householdId, namn) {
 }
 
 /**
- * Vilka kategorier som ska visas som valbara.
+ * Kategorierna som ska visas som valbara: hushållets egna, plus dem receptet
+ * redan bär.
  *
- * `medFörslag` skiljer de två platserna åt, och skillnaden är inte kosmetisk.
- * Förslagen finns inte i databasen förrän någon använder dem, och går alltså
- * inte att ta bort. På inmatningssidan är det rimligt – där väljer man, och en
- * startlista hjälper ett tomt hushåll igång.
- *
- * I receptvyn är det däremot fel: där redigerar man, och allt som syns ska gå
- * att bli av med. Tolv oborttagbara förslag på varje recept är skräp man inte
- * kan städa. Behövs en ny kategori finns fältet bredvid.
+ * Det senare är inte överflödigt. Ett recept kan hålla en kategori vars rad
+ * hunnit tas bort någon annanstans – den ska synas som vald och gå att klicka
+ * bort, inte tyst försvinna ur vyn medan den sitter kvar i databasen.
  */
-export function valbara(hushålletsTags, valda = [], { medFörslag = true } = {}) {
+export function valbara(hushålletsTags, valda = []) {
   const alla = new Set([
     ...hushålletsTags.map((tag) => normalizeTag(tag.name)),
     ...valda.map(normalizeTag),
-    ...(medFörslag ? FÖRSLAG : []),
   ]);
   return [...alla].filter(Boolean).sort((a, b) => a.localeCompare(b, 'sv'));
 }
