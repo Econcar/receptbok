@@ -10,7 +10,7 @@ import {
 } from '/session.js';
 import { looksSwedish } from '/lang.js';
 import { parseIngredients } from '/ingredients.js';
-import { normalizeTag, upsertTags, valbara } from '/tags.js';
+import { normalizeTag, valbara } from '/tags.js';
 
 const els = {
   gate: document.getElementById('gate'),
@@ -27,8 +27,7 @@ const els = {
   ingredients: document.getElementById('recipe-ingredients'),
   instructions: document.getElementById('recipe-instructions'),
   chips: document.getElementById('tag-chips'),
-  newTag: document.getElementById('new-tag'),
-  addTag: document.getElementById('add-tag'),
+  tagHint: document.getElementById('tag-hint'),
   translate: document.getElementById('translate-button'),
   reset: document.getElementById('reset-button'),
 };
@@ -38,7 +37,7 @@ let client = null;
 /** Det importen läste men formuläret inte visar. Följer med till databasen. */
 let pending = { source_name: null, source_ldjson: null };
 let chosen = new Set();
-/** Hushållets befintliga kategorier, så att egna dyker upp som förslag nästa gång. */
+/** Hushållets kategorier. Nya skapas på /kategorier, inte här. */
 let hushålletsTags = [];
 
 registerServiceWorker();
@@ -81,12 +80,6 @@ async function start() {
     return importRecipe();
   }));
 
-  els.addTag.addEventListener('click', () => addOwnTag());
-  els.newTag.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault(); // Annars skickas formuläret i stället.
-    addOwnTag();
-  });
 
   els.translate.addEventListener('click', guard(() => translate()));
   els.reset.addEventListener('click', clearForm);
@@ -99,6 +92,10 @@ async function start() {
 // --- Kategorier -------------------------------------------------------------
 
 function renderChips() {
+  els.tagHint.textContent = hushålletsTags.length
+    ? ''
+    : 'Inga kategorier ännu. Skapa dem under Hantera kategorier på startsidan.';
+
   els.chips.replaceChildren(...valbara(hushålletsTags, [...chosen]).map((name) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -114,15 +111,6 @@ function renderChips() {
   }));
 }
 
-function addOwnTag() {
-  // Gemener är ett villkor i schemat, inte en stilfråga: annars blir
-  // "Vegetariskt" och "vegetariskt" två kategorier som ser likadana ut.
-  const name = normalizeTag(els.newTag.value);
-  if (!name) return;
-  chosen.add(name);
-  els.newTag.value = '';
-  renderChips();
-}
 
 // --- Import och översättning ------------------------------------------------
 
@@ -280,12 +268,14 @@ async function saveRecipe() {
 }
 
 async function saveTags(recipeId) {
-  const tags = await upsertTags(client, household.id, [...chosen]);
-  hushålletsTags = tags.length ? [...hushålletsTags, ...tags] : hushålletsTags;
+  // Kategorierna finns redan – chipsen kommer ur hushållets egna. Här kopplas
+  // de bara till receptet.
+  const valda = hushålletsTags.filter((tag) => chosen.has(normalizeTag(tag.name)));
+  if (!valda.length) return;
 
   await client.insert(
     'recipe_tags',
-    tags.map((tag) => ({ recipe_id: recipeId, tag_id: tag.id })),
+    valda.map((tag) => ({ recipe_id: recipeId, tag_id: tag.id })),
     { returning: 'minimal' },
   );
 }

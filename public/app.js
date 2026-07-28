@@ -14,7 +14,7 @@ import {
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
 import { scaleFactor, scaleIngredient } from '/scale.js';
-import { normalizeTag, upsertTags, valbara } from '/tags.js';
+import { normalizeTag, valbara } from '/tags.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
   saveHousehold, saveRecipes, savedAgo,
@@ -38,8 +38,6 @@ const els = {
   inviteCopy: document.getElementById('invite-copy'),
   search: document.getElementById('search'),
   filters: document.getElementById('filters'),
-  manageTags: document.getElementById('manage-tags'),
-  tagAdmin: document.getElementById('tag-admin'),
   results: document.getElementById('results'),
 };
 
@@ -109,11 +107,6 @@ async function start() {
 
   els.reparse.addEventListener('click', guard(() => reparse(client)));
 
-  els.manageTags.addEventListener('click', () => {
-    els.tagAdmin.hidden = !els.tagAdmin.hidden;
-    els.manageTags.textContent = els.tagAdmin.hidden ? 'Hantera kategorier' : 'Dölj';
-    if (!els.tagAdmin.hidden) renderTagAdmin();
-  });
   els.inviteCreate.addEventListener('click', guard(() => skapaInbjudan(client)));
 
   els.inviteCopy.addEventListener('click', async () => {
@@ -315,12 +308,6 @@ function renderFilters() {
     for (const tag of tagsOf(recipe)) used.set(tag.id, tag.name);
   }
 
-  // Knappen visas så fort hushållet har någon kategori alls, även om inget
-  // recept använder den – en oanvänd feltavning är just det man vill bli av med.
-  els.manageTags.hidden = hushålletsTags.length === 0;
-  if (els.manageTags.hidden) els.tagAdmin.hidden = true;
-  if (!els.tagAdmin.hidden) renderTagAdmin();
-
   els.filters.replaceChildren();
   if (!used.size) return;
 
@@ -337,80 +324,6 @@ function renderFilters() {
       renderRecipes();
     }));
   }
-}
-
-/**
- * Att ta bort en kategori helt ur hushållet.
- *
- * Skilt från att klicka bort den på ett recept – det gör man ofta, det här gör
- * man när man stavat fel eller ångrat en indelning. Därför en egen vy och inte
- * ett kryss på varje chip: en felklickad borttagning hade tagit bort
- * kategorin från alla recept den satt på.
- */
-function renderTagAdmin() {
-  const antal = new Map();
-  for (const recipe of recipes) {
-    for (const tag of tagsOf(recipe)) antal.set(tag.id, (antal.get(tag.id) ?? 0) + 1);
-  }
-
-  if (!hushålletsTags.length) {
-    const tom = document.createElement('li');
-    tom.className = 'empty';
-    tom.textContent = 'Inga kategorier ännu.';
-    els.tagAdmin.replaceChildren(tom);
-    return;
-  }
-
-  els.tagAdmin.replaceChildren(...hushålletsTags.map((tag) => {
-    const n = antal.get(tag.id) ?? 0;
-
-    const li = document.createElement('li');
-
-    const namn = document.createElement('span');
-    namn.className = 'tag';
-    namn.textContent = tag.name;
-
-    const räkning = document.createElement('span');
-    räkning.className = 'source';
-    räkning.textContent = n === 0
-      ? 'används inte'
-      : `${n} ${n === 1 ? 'recept' : 'recept'}`;
-
-    const bort = document.createElement('button');
-    bort.type = 'button';
-    bort.className = 'linkbutton';
-    bort.textContent = 'Ta bort';
-    bort.addEventListener('click', guard(() => taBortTag(tag, n)));
-
-    li.append(namn, räkning, bort);
-    return li;
-  }));
-}
-
-async function taBortTag(tag, antal) {
-  // Alltid en fråga, även för en oanvänd kategori. Borttagningen går inte att
-  // ångra, och "Ta bort" sitter bredvid fyra andra rader – en felträff ska
-  // inte kosta något.
-  //
-  // Texten säger vad som faktiskt händer: en använd kategori försvinner från
-  // varje recept den satt på, vilket främmande nyckelns cascade sköter. Det är
-  // inte uppenbart att en borttagning här ändrar recept man inte tittar på.
-  const följd = antal > 0
-    ? `Den försvinner från ${antal} recept. Recepten själva rörs inte.`
-    : 'Den används inte av något recept.';
-
-  if (!confirm(`Ta bort kategorin "${tag.name}"?\n\n${följd}`)) return;
-
-  setStatus(`Tar bort kategorin ${tag.name} …`);
-  await client.rest(`tags?id=eq.${tag.id}`, {
-    method: 'DELETE',
-    headers: { prefer: 'return=minimal' },
-  });
-
-  if (activeTag === tag.id) activeTag = null;
-  await fetchRecipes(client);
-  renderTagAdmin();
-  setStatus(`Kategorin ${tag.name} är borttagen.`, 'ok');
 }
 
 function chip(label, active, onClick) {
@@ -551,6 +464,10 @@ function recipeCard(recipe) {
  * Att kunna sätta dem i efterhand är hela poängen: recept importeras ofta i en
  * hast och kategoriseras när man har lust. Att behöva mata in receptet på nytt
  * för att lägga till "middag" hade betytt att ingen gjorde det.
+ *
+ * Här går det bara att kryssa i och ur. Nya kategorier skapas på /kategorier
+ * och tas bort där. Att bestämma vilka kategorier som finns gör man sällan och
+ * eftertänksamt; att kryssa i dem gör man ofta och i förbifarten.
  */
 function kategoriRad(recipe) {
   const bar = document.createElement('div');
@@ -563,35 +480,11 @@ function kategoriRad(recipe) {
       const knapp = chip(name, valda.has(name), guard(() => växlaTag(recipe, name, rita)));
       knapp.classList.add('chip-liten');
       return knapp;
-    }), nyKategoriFält(recipe, rita));
+    }));
   };
 
   rita();
   return bar;
-}
-
-/** Fält för en kategori som inte finns ännu. */
-function nyKategoriFält(recipe, rita) {
-  const form = document.createElement('form');
-  form.className = 'nytagg';
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.maxLength = 40;
-  input.autocomplete = 'off';
-  input.placeholder = '+ egen';
-  input.setAttribute('aria-label', `Ny kategori för ${recipe.title}`);
-
-  form.append(input);
-  form.addEventListener('submit', guard(async (event) => {
-    event.preventDefault();
-    const name = normalizeTag(input.value);
-    if (!name) return;
-    input.value = '';
-    await växlaTag(recipe, name, rita, true);
-  }));
-
-  return form;
 }
 
 /**
@@ -601,20 +494,26 @@ function nyKategoriFält(recipe, rita) {
  * fällt ihop receptet man just satt och läser – samma skäl som att omhämtningen
  * vid flikbyte avstår när något är utfällt.
  */
-async function växlaTag(recipe, name, rita, baraLäggTill = false) {
+async function växlaTag(recipe, name, rita) {
   const nuvarande = tagsOf(recipe);
   const träff = nuvarande.find((tag) => normalizeTag(tag.name) === name);
 
-  if (träff && !baraLäggTill) {
+  if (träff) {
     await client.rest(
       `recipe_tags?recipe_id=eq.${recipe.id}&tag_id=eq.${träff.id}`,
       { method: 'DELETE', headers: { prefer: 'return=minimal' } },
     );
     recipe.recipe_tags = (recipe.recipe_tags ?? [])
       .filter((rad) => rad.tags?.id !== träff.id);
-  } else if (!träff) {
-    const [tag] = await upsertTags(client, household.id, [name]);
-    if (!tag) return;
+  } else {
+    // Kategorin måste finnas sedan tidigare. Den här vyn kopplar bara ihop –
+    // att den kunde skapa nya bakvägen vore att kringgå regeln om att
+    // kategorier bestäms på /kategorier.
+    const tag = hushålletsTags.find((t) => normalizeTag(t.name) === name);
+    if (!tag) {
+      setStatus(`Kategorin ${name} finns inte längre. Skapa den under Hantera kategorier.`, 'warn');
+      return;
+    }
 
     await client.rest('recipe_tags?on_conflict=recipe_id,tag_id', {
       method: 'POST',
@@ -623,7 +522,6 @@ async function växlaTag(recipe, name, rita, baraLäggTill = false) {
     });
 
     recipe.recipe_tags = [...(recipe.recipe_tags ?? []), { tags: tag }];
-    if (!hushålletsTags.some((t) => t.id === tag.id)) hushålletsTags.push(tag);
   }
 
   saveRecipes(recipes, household.id);

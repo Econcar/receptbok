@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kategorier · Receptbok</title>
+<meta name="description" content="Hushållets receptkategorier – skapa, byt namn och ta bort.">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Kategorier</h1>
+  <p class="tagline"><a href="/">← Tillbaka till recepten</a></p>
+  <div class="account" id="account" hidden>
+    <span id="account-name"></span>
+    <button type="button" id="signout" class="linkbutton">Logga ut</button>
+  </div>
+</header>
+
+<main>
+  <p id="status" class="status" role="status">Kontrollerar …</p>
+
+  <section class="panel" id="gate" hidden>
+    <p>Gå till <a href="/">startsidan</a> för att logga in och skapa ditt hushåll.</p>
+  </section>
+
+  <div id="manager" hidden>
+    <section class="panel">
+      <h2>Ny kategori</h2>
+      <form class="form" id="new-form">
+        <label for="new-name">Namn</label>
+        <input type="text" id="new-name" maxlength="40" required autocomplete="off"
+               placeholder="t.ex. middag">
+        <button type="submit" class="button">Skapa</button>
+      </form>
+      <p class="muted">Kategorierna sätts på recepten, inte här. Det gör du genom
+        att fälla ut ett recept på startsidan och klicka i dem.</p>
+    </section>
+
+    <section>
+      <h2 class="sectionhead">Hushållets kategorier</h2>
+      <ul id="list" class="tagadmin"></ul>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  <span id="meta"></span>
+</footer>
+
+<script type="module" src="/kategorier.js"></script>
+</body>
+</html>
