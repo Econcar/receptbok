@@ -38,6 +38,8 @@ const els = {
   inviteCopy: document.getElementById('invite-copy'),
   search: document.getElementById('search'),
   filters: document.getElementById('filters'),
+  manageTags: document.getElementById('manage-tags'),
+  tagAdmin: document.getElementById('tag-admin'),
   results: document.getElementById('results'),
 };
 
@@ -106,6 +108,12 @@ async function start() {
   });
 
   els.reparse.addEventListener('click', guard(() => reparse(client)));
+
+  els.manageTags.addEventListener('click', () => {
+    els.tagAdmin.hidden = !els.tagAdmin.hidden;
+    els.manageTags.textContent = els.tagAdmin.hidden ? 'Hantera kategorier' : 'Dölj';
+    if (!els.tagAdmin.hidden) renderTagAdmin();
+  });
   els.inviteCreate.addEventListener('click', guard(() => skapaInbjudan(client)));
 
   els.inviteCopy.addEventListener('click', async () => {
@@ -307,6 +315,12 @@ function renderFilters() {
     for (const tag of tagsOf(recipe)) used.set(tag.id, tag.name);
   }
 
+  // Knappen visas så fort hushållet har någon kategori alls, även om inget
+  // recept använder den – en oanvänd feltavning är just det man vill bli av med.
+  els.manageTags.hidden = hushålletsTags.length === 0;
+  if (els.manageTags.hidden) els.tagAdmin.hidden = true;
+  if (!els.tagAdmin.hidden) renderTagAdmin();
+
   els.filters.replaceChildren();
   if (!used.size) return;
 
@@ -323,6 +337,79 @@ function renderFilters() {
       renderRecipes();
     }));
   }
+}
+
+/**
+ * Att ta bort en kategori helt ur hushållet.
+ *
+ * Skilt från att klicka bort den på ett recept – det gör man ofta, det här gör
+ * man när man stavat fel eller ångrat en indelning. Därför en egen vy och inte
+ * ett kryss på varje chip: en felklickad borttagning hade tagit bort
+ * kategorin från alla recept den satt på.
+ */
+function renderTagAdmin() {
+  const antal = new Map();
+  for (const recipe of recipes) {
+    for (const tag of tagsOf(recipe)) antal.set(tag.id, (antal.get(tag.id) ?? 0) + 1);
+  }
+
+  if (!hushålletsTags.length) {
+    const tom = document.createElement('li');
+    tom.className = 'empty';
+    tom.textContent = 'Inga kategorier ännu.';
+    els.tagAdmin.replaceChildren(tom);
+    return;
+  }
+
+  els.tagAdmin.replaceChildren(...hushålletsTags.map((tag) => {
+    const n = antal.get(tag.id) ?? 0;
+
+    const li = document.createElement('li');
+
+    const namn = document.createElement('span');
+    namn.className = 'tag';
+    namn.textContent = tag.name;
+
+    const räkning = document.createElement('span');
+    räkning.className = 'source';
+    räkning.textContent = n === 0
+      ? 'används inte'
+      : `${n} ${n === 1 ? 'recept' : 'recept'}`;
+
+    const bort = document.createElement('button');
+    bort.type = 'button';
+    bort.className = 'linkbutton';
+    bort.textContent = 'Ta bort';
+    bort.addEventListener('click', guard(() => taBortTag(tag, n)));
+
+    li.append(namn, räkning, bort);
+    return li;
+  }));
+}
+
+async function taBortTag(tag, antal) {
+  // En kategori som används försvinner från varje recept den satt på – det
+  // sköter främmande nyckeln med cascade. Att fråga först är därför inte
+  // artighet utan nödvändigt: det är inte uppenbart att en borttagning här
+  // ändrar recept man inte tittar på.
+  if (antal > 0) {
+    const svar = confirm(
+      `Ta bort kategorin "${tag.name}"? Den försvinner från ${antal} `
+      + `${antal === 1 ? 'recept' : 'recept'}. Recepten själva rörs inte.`,
+    );
+    if (!svar) return;
+  }
+
+  setStatus(`Tar bort kategorin ${tag.name} …`);
+  await client.rest(`tags?id=eq.${tag.id}`, {
+    method: 'DELETE',
+    headers: { prefer: 'return=minimal' },
+  });
+
+  if (activeTag === tag.id) activeTag = null;
+  await fetchRecipes(client);
+  renderTagAdmin();
+  setStatus(`Kategorin ${tag.name} är borttagen.`, 'ok');
 }
 
 function chip(label, active, onClick) {
