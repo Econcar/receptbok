@@ -6,6 +6,7 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '/config.js';
 import { createClient, RestError } from '/supabase.js';
+import { VERSION } from '/version.js';
 
 export { RestError };
 
@@ -77,6 +78,18 @@ export function guard(handler) {
       setStatus(describe(err), 'error');
     }
   };
+}
+
+/**
+ * Skriver ut versionen i sidfoten.
+ *
+ * Ligger här och inte i varje sida, för att alla tre ska säga samma sak. Står
+ * en gammal version kvar efter en utrullning är det service workern som
+ * serverar ur cachen, och då vet man det i stället för att undra.
+ */
+export function showVersion() {
+  const el = document.getElementById('meta');
+  if (el) el.textContent = `Receptbok · ${VERSION}`;
 }
 
 export function registerServiceWorker() {

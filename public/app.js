@@ -8,7 +8,8 @@
 // Receptexten är hämtad från en främmande sajt och behandlas därefter.
 
 import {
-  configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, startSession,
+  configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
+  startSession,
 } from '/session.js';
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
@@ -37,7 +38,6 @@ const els = {
   search: document.getElementById('search'),
   filters: document.getElementById('filters'),
   results: document.getElementById('results'),
-  meta: document.getElementById('meta'),
 };
 
 let client = null;
@@ -49,7 +49,7 @@ let öppna = 0;
 let senasteHämtning = 0;
 
 registerServiceWorker();
-els.meta.textContent = 'Receptbok · fas 3';
+showVersion();
 
 if (!configured) {
   setStatus('Sajten är utrullad, men public/config.js är inte ifylld ännu.', 'warn');

@@ -1,6 +1,9 @@
 // Enkel service worker: precache av skalet, network-first för API, cache-first för statiskt.
 // Höj CACHE_VERSION när skalet ändras.
-const CACHE_VERSION = 'v12';
+// Måste vara samma sträng som VERSION i public/version.js – annars visar
+// sidfoten en annan version än den som faktiskt cachats. tests/version.test.mjs
+// ser till att de inte glider isär.
+const CACHE_VERSION = 'v13';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const DATA_CACHE = `data-${CACHE_VERSION}`;
 
@@ -22,6 +25,7 @@ const SHELL = [
   '/kitchen.js',
   '/ingredients.js',
   '/scale.js',
+  '/version.js',
   '/config.js',
   '/manifest.webmanifest',
   '/icons/icon-192.png',

@@ -9,7 +9,8 @@
 // fråga ingen vill ställa sig framför kylskåpet.
 
 import {
-  configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, startSession,
+  configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
+  startSession,
 } from '/session.js';
 import { buildShoppingList, formatItem, normalizeName } from '/shopping.js';
 
@@ -28,7 +29,6 @@ const els = {
   list: document.getElementById('list'),
   itemForm: document.getElementById('item-form'),
   newItem: document.getElementById('new-item'),
-  meta: document.getElementById('meta'),
 };
 
 let client = null;
@@ -54,7 +54,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 registerServiceWorker();
-els.meta.textContent = 'Receptbok · fas 5';
+showVersion();
 
 if (!configured) {
   setStatus('Sajten är utrullad, men public/config.js är inte ifylld ännu.', 'warn');

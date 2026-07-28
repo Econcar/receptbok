@@ -5,7 +5,8 @@
 // översättningen har fel ibland, och det ska synas före databasen – inte efter.
 
 import {
-  configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, startSession,
+  configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
+  startSession,
 } from '/session.js';
 import { looksSwedish } from '/lang.js';
 import { parseIngredients } from '/ingredients.js';
@@ -35,7 +36,6 @@ const els = {
   addTag: document.getElementById('add-tag'),
   translate: document.getElementById('translate-button'),
   reset: document.getElementById('reset-button'),
-  meta: document.getElementById('meta'),
 };
 
 let household = null;
@@ -45,7 +45,7 @@ let pending = { source_name: null, source_ldjson: null };
 let chosen = new Set();
 
 registerServiceWorker();
-els.meta.textContent = 'Receptbok · fas 2';
+showVersion();
 
 if (!configured) {
   setStatus('Sajten är utrullad, men public/config.js är inte ifylld ännu.', 'warn');
