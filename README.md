@@ -100,4 +100,6 @@ innehålla `/rest/v1/`.
 - [x] Fas 3: kökläget – sök, receptvy, offline, wake lock
 - [x] Fas 4: ingredienstolkning
 - [x] Fas 5: veckoplan + inköpslista
+- [x] Portionsskalning i receptvyn – mängderna räknas om, tiden och ugnsvärmen inte
 - [ ] Fas 6: inbjudan till hushållet
+- [ ] Kanonisk ingredienslista + gruppering per butiksavdelning

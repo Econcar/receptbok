@@ -156,7 +156,10 @@ ingrediens är tolkad.
   Recepten sparas lokalt vid varje lyckad hämtning och visas därifrån när nätet saknas.
 - **Inköpslistan:** gruppera per butiksavdelning (mejeri, grönt, torrvaror)? Kräver att
   `ingredients.category` fylls i noggrant.
-- **Hushållsinbjudan:** delbar länk eller inmatad e-postadress?
+- ~~**Hushållsinbjudan:**~~ Avgjort: delbar länk. En inmatad adress kräver att man vet
+  exakt vilket Google-konto den andra loggar in med, och gissar man fel händer ingenting
+  alls – ett tyst fel är sämre än ett synligt. Länken bär i stället tre spärrar:
+  engångsbruk, sju dagars giltighet, och bara ägare får skapa den.
 
 ## 11. Uppsättning: fällor vi redan gått i
 
