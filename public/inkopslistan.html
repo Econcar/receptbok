@@ -29,15 +29,15 @@
   </section>
 
   <div id="listwrap" hidden>
-    <p class="muted" id="list-meta"></p>
-    <ul id="list" class="shopping"></ul>
-
     <form class="form addrow" id="item-form">
-      <label class="sr-only" for="new-item">Lägg till en egen vara</label>
+      <label class="sr-only" for="new-item">Lägg till en vara</label>
       <input type="text" id="new-item" maxlength="80" autocomplete="off"
-             placeholder="Lägg till något själv – t.ex. kaffe">
+             placeholder="Lägg till – t.ex. 2 dl grädde eller kaffe">
       <button type="submit" class="button">Lägg till</button>
     </form>
+
+    <p class="muted" id="list-meta"></p>
+    <ul id="list" class="shopping"></ul>
 
     <section id="done-section" hidden>
       <h2 class="sectionhead">Redan inhandlat</h2>
@@ -50,6 +50,10 @@
     <p class="muted" id="hidden-note" hidden>
       <span id="hidden-count"></span>
       <button type="button" class="linkbutton" id="restore-hidden">Återställ</button>
+    </p>
+
+    <p class="muted">
+      <button type="button" class="linkbutton" id="clear-all">Rensa hela inköpslistan</button>
     </p>
   </div>
 </main>

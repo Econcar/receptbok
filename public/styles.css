@@ -453,3 +453,27 @@ body {
    vill kunna se vad man tagit, inte bara att raden är borta. */
 .inhandlat label { color: var(--muted); text-decoration: line-through; }
 .inhandlat li { border-bottom-color: transparent; }
+
+/* Varan, avdelningen och knapparna på samma rad. Tidigare låg Ta bort under
+   ingrediensen, vilket gjorde listan dubbelt så hög som den behövde vara. */
+.varurad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.varurad label { flex: 1; min-width: 10rem; }
+.varurad .varunamn { flex: 1; }
+.varurad .avdelningsval { margin-left: 0; }
+
+.varurad input[type="text"] {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}

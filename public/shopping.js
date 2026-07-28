@@ -30,8 +30,14 @@ function familj(unit) {
   return null;
 }
 
-/** Nyckeln avgör vad som får slås ihop. Samma nyckel, samma rad. */
-function nyckel(name, unit) {
+/**
+ * Nyckeln avgör vad som får slås ihop. Samma nyckel, samma rad.
+ *
+ * Exporterad för att anroparen ska kunna peka ut en rad utan att gissa hur
+ * grupperingen fungerar – "2 dl grädde" och "2 msk grädde" hamnar i samma
+ * grupp, och en nyckel byggd på råa enheter hade missat det.
+ */
+export function groupKey(name, unit) {
   const vara = normalizeName(name);
   const grupp = familj(unit)?.namn ?? `=${unit ?? ''}`;
   return `${vara}|${grupp}`;
@@ -45,9 +51,10 @@ export function normalizeName(name) {
 /**
  * @param {Array<{recipe: object, servings: number|null}>} poster veckans rätter
  * @param {Array<{name, quantity, unit}>} egna rader man lagt till för hand
+ * @param {Set<string>} dolda gruppnycklar vars planbidrag ska hoppas över
  * @returns {Array<{name, quantity, unit, approximate, manuellt, recipes: string[]}>}
  */
-export function buildShoppingList(poster, egna = []) {
+export function buildShoppingList(poster, egna = [], dolda = new Set()) {
   const grupper = new Map();
 
   // Handtillagda rader går genom samma sammanslagning som planens. Att stå med
@@ -76,6 +83,11 @@ export function buildShoppingList(poster, egna = []) {
       const name = rad.name ?? rad.raw_text;
       if (!normalizeName(name)) continue;
 
+      // Bortplockat gäller bara det planen bidrar med. En handtillagd rad med
+      // samma nyckel står kvar – det är så en ändrad rad ersätter den uträknade
+      // i stället för att adderas till den.
+      if (dolda.has(groupKey(name, rad.unit))) continue;
+
       const grupp = hämtaGrupp(grupper, name, rad.unit);
       grupp.recipes.add(recipe.title);
 
@@ -95,7 +107,7 @@ export function buildShoppingList(poster, egna = []) {
 
 /** Samma nyckel oavsett varifrån raden kom – det är hela poängen. */
 function hämtaGrupp(grupper, name, unit) {
-  const k = nyckel(name, unit);
+  const k = groupKey(name, unit);
   if (!grupper.has(k)) {
     grupper.set(k, {
       name: String(name).trim(),

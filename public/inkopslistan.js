@@ -11,7 +11,8 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
   startSession,
 } from '/session.js';
-import { buildShoppingList, formatItem, normalizeName } from '/shopping.js';
+import { buildShoppingList, formatItem, groupKey, normalizeName } from '/shopping.js';
+import { parseIngredient } from '/ingredients.js';
 import { groupByCategory, KATEGORIER } from '/categories.js';
 
 const DAGAR = 7;
@@ -29,7 +30,11 @@ const els = {
   hiddenNote: document.getElementById('hidden-note'),
   hiddenCount: document.getElementById('hidden-count'),
   restoreHidden: document.getElementById('restore-hidden'),
+  clearAll: document.getElementById('clear-all'),
 };
+
+/** Nyckeln på den rad som just ändras, eller null. */
+let redigerar = null;
 
 let client = null;
 let household = null;
@@ -81,6 +86,7 @@ async function start() {
 
   els.clearChecked.addEventListener('click', guard(() => rensaInhandlat()));
   els.restoreHidden.addEventListener('click', guard(() => återställDolda()));
+  els.clearAll.addEventListener('click', guard(() => rensaAllt()));
 
   await ladda();
 }
@@ -130,21 +136,29 @@ const bockNyckel = (name, unit) => `${normalizeName(name)}|${unit ?? ''}`;
 const egnaRader = () => sparade.filter((rad) => rad.source === 'manual');
 
 function render() {
-  const uträknad = buildShoppingList(
-    plan.map((rad) => ({ recipe: receptet(rad.recipe_id), servings: rad.servings })),
-    egnaRader(),
-  );
-
   const märken = new Map(
     sparade.filter((rad) => rad.source === 'plan')
       .map((rad) => [bockNyckel(rad.name, rad.unit), rad]),
   );
-  const märke = (post) => märken.get(bockNyckel(post.name, post.unit));
 
-  // Bortplockade rader räknas fortfarande fram men visas inte. De försvinner
-  // alltså inte tyst: raden längst ner säger hur många de är och tar tillbaka dem.
-  const synliga = uträknad.filter((post) => !märke(post)?.hidden);
-  const dolda = uträknad.length - synliga.length;
+  // Bortplockat gäller planens bidrag. En handtillagd rad med samma nyckel står
+  // kvar – det är så en ändrad rad ersätter den uträknade i stället för att
+  // adderas till den.
+  const dolda = new Set(
+    sparade.filter((rad) => rad.source === 'plan' && rad.hidden)
+      .map((rad) => groupKey(rad.name, rad.unit)),
+  );
+
+  const synliga = buildShoppingList(
+    plan.map((rad) => ({ recipe: receptet(rad.recipe_id), servings: rad.servings })),
+    egnaRader(),
+    dolda,
+  );
+
+  const märke = (post) => märken.get(bockNyckel(post.name, post.unit));
+  const kvarDolda = [...dolda].filter(
+    (k) => !synliga.some((post) => groupKey(post.name, post.unit) === k),
+  ).length;
 
   const attHandla = synliga.filter((post) => !märke(post)?.checked);
   const inhandlat = synliga.filter((post) => märke(post)?.checked);
@@ -166,10 +180,10 @@ function render() {
   els.doneSection.hidden = inhandlat.length === 0;
   els.done.replaceChildren(...inhandlat.map((post) => listrad(post, märke(post))));
 
-  els.hiddenNote.hidden = dolda === 0;
-  els.hiddenCount.textContent = dolda === 1
+  els.hiddenNote.hidden = kvarDolda === 0;
+  els.hiddenCount.textContent = kvarDolda === 1
     ? '1 vara är bortplockad. '
-    : `${dolda} varor är bortplockade. `;
+    : `${kvarDolda} varor är bortplockade. `;
 
   const delar = [];
   if (synliga.length) delar.push(`${attHandla.length} av ${synliga.length} kvar`);
@@ -182,32 +196,55 @@ function render() {
 }
 
 function listrad(post, märke) {
-  const li = document.createElement('li');
-  const label = document.createElement('label');
+  const nyckel = groupKey(post.name, post.unit);
+  if (nyckel === redigerar) return ändraRad(post);
 
+  const li = document.createElement('li');
+  const rad = document.createElement('div');
+  rad.className = 'varurad';
+
+  const label = document.createElement('label');
   const box = document.createElement('input');
   box.type = 'checkbox';
   box.checked = Boolean(märke?.checked);
   box.addEventListener('change', guard(() => bocka(post, box.checked)));
 
   const text = document.createElement('span');
+  text.className = 'varunamn';
   text.textContent = formatItem(post);
   label.append(box, text);
 
   // Härkomst, avdelning och ca-flagga hör till handlandet. Ligger varan redan
   // i kundvagnen är de bara brus.
-  if (!märke?.checked) {
-    if (post.approximate) {
-      const flagga = document.createElement('span');
-      flagga.className = 'tag';
-      flagga.textContent = 'ca';
-      flagga.title = 'Mängden är skalad efter portioner och är ungefärlig';
-      label.append(flagga);
-    }
-    label.append(kategoriväljare(post.name));
+  if (!märke?.checked && post.approximate) {
+    const flagga = document.createElement('span');
+    flagga.className = 'tag';
+    flagga.textContent = 'ca';
+    flagga.title = 'Mängden är skalad efter portioner och är ungefärlig';
+    label.append(flagga);
   }
 
-  li.append(label);
+  rad.append(label);
+  if (!märke?.checked) rad.append(kategoriväljare(post.name));
+
+  const ändra = document.createElement('button');
+  ändra.type = 'button';
+  ändra.className = 'linkbutton';
+  ändra.textContent = 'Ändra';
+  ändra.addEventListener('click', () => {
+    redigerar = nyckel;
+    render();
+    els.wrap.querySelector('.varurad input[type="text"]')?.select();
+  });
+
+  const bort = document.createElement('button');
+  bort.type = 'button';
+  bort.className = 'linkbutton';
+  bort.textContent = 'Ta bort';
+  bort.addEventListener('click', guard(() => taBort(post)));
+
+  rad.append(ändra, bort);
+  li.append(rad);
 
   if (!märke?.checked) {
     const härkomst = [...post.recipes];
@@ -220,14 +257,84 @@ function listrad(post, märke) {
     }
   }
 
-  const bort = document.createElement('button');
-  bort.type = 'button';
-  bort.className = 'linkbutton';
-  bort.textContent = 'Ta bort';
-  bort.addEventListener('click', guard(() => taBort(post)));
-  li.append(bort);
-
   return li;
+}
+
+/**
+ * Ändring av en rad, som fritext.
+ *
+ * Texten tolkas med samma parser som receptens ingredienser – "2,5 dl mjölk"
+ * blir mängd, enhet och vara. Ett eget fält per del hade varit tre rutor att
+ * fylla i för något man skriver på en sekund.
+ */
+function ändraRad(post) {
+  const li = document.createElement('li');
+  const form = document.createElement('form');
+  form.className = 'varurad';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = formatItem(post);
+  input.maxLength = 80;
+  input.required = true;
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', `Ändra ${post.name}`);
+
+  const spara = document.createElement('button');
+  spara.type = 'submit';
+  spara.className = 'linkbutton';
+  spara.textContent = 'Spara';
+
+  const avbryt = document.createElement('button');
+  avbryt.type = 'button';
+  avbryt.className = 'linkbutton';
+  avbryt.textContent = 'Avbryt';
+  avbryt.addEventListener('click', () => {
+    redigerar = null;
+    render();
+  });
+
+  form.append(input, spara, avbryt);
+  form.addEventListener('submit', guard((event) => {
+    event.preventDefault();
+    return sparaÄndring(post, input.value);
+  }));
+
+  li.append(form);
+  return li;
+}
+
+/**
+ * Sparar en ändrad rad.
+ *
+ * Den uträknade raden plockas bort och ersätts av en handtillagd med det man
+ * skrev. Att i stället ändra receptet vore fel: mängden i inköpslistan gäller
+ * den här handlingen, inte hur rätten ska lagas nästa gång.
+ */
+async function sparaÄndring(post, text) {
+  const tolkad = parseIngredient(text);
+  if (!tolkad.name) {
+    setStatus('Skriv minst ett varunamn.', 'warn');
+    return;
+  }
+
+  await taBortRader(post);
+  await sättMärke(post, { hidden: true, checked: false });
+
+  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
+    method: 'POST',
+    body: {
+      household_id: household.id,
+      name: tolkad.name,
+      unit: tolkad.unit,
+      quantity: tolkad.quantity,
+      source: 'manual',
+    },
+    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+  });
+
+  redigerar = null;
+  await ladda();
 }
 
 function kategoriväljare(namn) {
@@ -320,27 +427,41 @@ async function bocka(post, checked) {
  * bara för att man redan har mjöl hemma.
  */
 async function taBort(post) {
-  const nyckel = bockNyckel(post.name, post.unit);
+  await taBortRader(post);
+  await sättMärke(post, { hidden: true, checked: false });
+  render();
+}
+
+/** Raderar de handtillagda bidragen till en rad. Planens del märks separat. */
+async function taBortRader(post) {
+  const nyckel = groupKey(post.name, post.unit);
 
   for (const egen of egnaRader()) {
-    if (bockNyckel(egen.name, egen.unit) !== nyckel) continue;
+    if (groupKey(egen.name, egen.unit) !== nyckel) continue;
     await client.rest(`shopping_list_items?id=eq.${egen.id}`, {
       method: 'DELETE', headers: { prefer: 'return=minimal' },
     });
   }
 
   sparade = await client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`);
-  await sättMärke(post, { hidden: true, checked: false });
-  render();
 }
 
 async function läggTillEgen() {
-  const name = els.newItem.value.trim();
-  if (!name) return;
+  // Tolkas som en ingrediensrad, så att "2 dl grädde" blir mängd, enhet och
+  // vara och kan slås ihop med planens grädde. Skriver man bara "kaffe" blir
+  // det en rad utan mängd, precis som förut.
+  const tolkad = parseIngredient(els.newItem.value);
+  if (!tolkad.name) return;
 
   await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
     method: 'POST',
-    body: { household_id: household.id, name, source: 'manual' },
+    body: {
+      household_id: household.id,
+      name: tolkad.name,
+      unit: tolkad.unit,
+      quantity: tolkad.quantity,
+      source: 'manual',
+    },
     headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
   });
 
@@ -396,4 +517,33 @@ async function återställDolda() {
 
   await ladda();
   setStatus('Bortplockade varor är tillbaka.', 'ok');
+}
+
+/**
+ * Rensar hela listan: alla handtillagda rader, alla bockar och alla
+ * bortplock. Veckoplanen rörs inte – står rätterna kvar fylls listan på nytt
+ * nästa gång sidan öppnas, vilket är meningen.
+ */
+async function rensaAllt() {
+  if (!sparade.length) {
+    setStatus('Listan är redan tom.', 'warn');
+    return;
+  }
+
+  const svar = confirm([
+    'Rensa hela inköpslistan?',
+    '',
+    'Allt du lagt till själv försvinner, liksom bockar och bortplock. '
+    + 'Veckoplanen rörs inte, så listan fylls på nytt av de rätter som står kvar.',
+  ].join('\n'));
+  if (!svar) return;
+
+  setStatus('Rensar …');
+  await client.rest(`shopping_list_items?household_id=eq.${household.id}`, {
+    method: 'DELETE',
+    headers: { prefer: 'return=minimal' },
+  });
+
+  await ladda();
+  setStatus('Inköpslistan är rensad.', 'ok');
 }
