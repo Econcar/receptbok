@@ -13,7 +13,8 @@ import {
 } from '/session.js';
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
-import { scaleFactor, scaleIngredient } from '/scale.js';
+import { scaleFactor, scaleIngredient, scaleQuantity } from '/scale.js';
+import { groupKey } from '/shopping.js';
 import { normalizeTag, valbara } from '/tags.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
@@ -428,13 +429,20 @@ function recipeCard(recipe) {
     const list = document.createElement('ul');
     list.className = 'ingredients';
 
+    // Kryssrutorna är urvalet till inköpslistan. Behåll referensen till dem, så
+    // att knappen nedan vet vilka som är ikryssade och kan nollställa dem efteråt.
+    const rutor = [];
+
     // Ritas om vid varje portionsändring. Bockarna nollställs på köpet, och
     // det är rätt: ändrar man antalet portioner mäter man upp på nytt.
     const rita = (ny) => {
       faktor = ny;
-      list.replaceChildren(...ingredients.map(
-        (item) => ingredientRow(scaleIngredient(item, faktor)),
-      ));
+      rutor.length = 0;
+      list.replaceChildren(...ingredients.map((item) => {
+        const { li, box } = ingredientRow(scaleIngredient(item, faktor));
+        rutor.push({ item, box });
+        return li;
+      }));
     };
 
     // Väljaren kräver två saker: ett portionsantal att utgå från, och minst en
@@ -451,8 +459,20 @@ function recipeCard(recipe) {
     const handla = document.createElement('button');
     handla.type = 'button';
     handla.className = 'linkbutton';
-    handla.textContent = 'Lägg ingredienserna i inköpslistan';
-    handla.addEventListener('click', guard(() => läggIInköpslista(recipe, faktor)));
+    handla.textContent = 'Lägg ikryssade i inköpslistan';
+    handla.addEventListener('click', guard(async () => {
+      const valda = rutor.filter(({ box }) => box.checked);
+      if (!valda.length) {
+        setStatus('Kryssa i de ingredienser du vill handla först.', 'warn');
+        return;
+      }
+
+      await läggIInköpslista(valda.map(({ item }) => item), faktor);
+
+      // Kryssen nollställs först när det gått vägen. Slår anropet fel står de
+      // kvar, så man kan trycka igen utan att välja om.
+      for (const { box } of valda) box.checked = false;
+    }));
     details.append(handla);
   }
 
@@ -515,7 +535,12 @@ function stjärna(recipe) {
 }
 
 /**
- * Lägger receptets ingredienser i inköpslistan, utan att gå via veckoplanen.
+ * Lägger de ikryssade ingredienserna i inköpslistan, utan att gå via
+ * veckoplanen.
+ *
+ * Bara det man kryssat i. Man har oftast det mesta hemma, och en knapp som
+ * lade i allt gav en lista där man själv fick plocka bort mjöl och salt varje
+ * gång – mer arbete än att skriva den för hand.
  *
  * Mängderna följer portionsväljaren: har man ställt om till sex portioner är
  * det sex portioner man handlar till. Rader utan mängd – "salt efter smak" –
@@ -524,19 +549,17 @@ function stjärna(recipe) {
  * Finns varan redan som handtillagd summeras mängden i stället för att skrivas
  * över. "Lägg till" ska lägga till.
  */
-async function läggIInköpslista(recipe, faktor) {
-  const rader = (recipe.recipe_ingredients ?? [])
+async function läggIInköpslista(ingredienser, faktor) {
+  const rader = ingredienser
     .map((rad) => ({
       name: (rad.name || rad.raw_text || '').trim(),
       unit: rad.unit ?? null,
-      quantity: rad.quantity === null || rad.quantity === undefined
-        ? null
-        : Math.round(rad.quantity * faktor * 1000) / 1000,
+      quantity: scaleQuantity(rad.quantity, faktor),
     }))
     .filter((rad) => rad.name);
 
   if (!rader.length) {
-    setStatus('Receptet har inga ingredienser att lägga till.', 'warn');
+    setStatus('De ikryssade raderna saknar varunamn.', 'warn');
     return;
   }
 
@@ -566,7 +589,38 @@ async function läggIInköpslista(recipe, faktor) {
     headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
   });
 
-  setStatus(`${rader.length} rader lagda i inköpslistan.`, 'ok');
+  await nollställMärken(rader);
+
+  const antal = rader.length === 1 ? '1 vara' : `${rader.length} varor`;
+  setStatus(`${antal} lagda i inköpslistan.`, 'ok');
+}
+
+/**
+ * Tar bort bock- och bortplocksmärken för de varor som just lagts i listan.
+ *
+ * Utan det hamnar en vara man handlade förra veckan direkt under "Redan
+ * inhandlat", och en man plockat bort syns inte alls – märkena ligger kvar och
+ * gäller fel omgång. Att lägga något i listan betyder att man vill handla det,
+ * och då ska det stå bland det som ska handlas.
+ *
+ * Jämförelsen går på gruppnyckeln och inte på enheten rakt av: listan skriver
+ * summan i den enhet som blir läsligast, så märket för 500 ml mjölk kan mycket
+ * väl stå som "0,5 l mjölk".
+ */
+async function nollställMärken(rader) {
+  const nycklar = new Set(rader.map((rad) => groupKey(rad.name, rad.unit)));
+
+  const märken = await client.rest(
+    `shopping_list_items?select=id,name,unit&household_id=eq.${household.id}&source=eq.plan`,
+  );
+
+  for (const märke of märken) {
+    if (!nycklar.has(groupKey(märke.name, märke.unit))) continue;
+    await client.rest(`shopping_list_items?id=eq.${märke.id}`, {
+      method: 'DELETE',
+      headers: { prefer: 'return=minimal' },
+    });
+  }
 }
 
 /**
@@ -683,11 +737,16 @@ function portionsväljare(recipe, rita) {
 }
 
 /**
- * Avbockningsbar, för att hålla reda på var man är när man mäter upp. En
- * riktig kryssruta och inte en klickbar rad: den går att träffa med tummen,
- * fungerar med tangentbord och läses upp rätt av skärmläsare.
+ * Avbockningsbar, för att hålla reda på var man är när man mäter upp, och för
+ * att välja ut vad som ska handlas. En riktig kryssruta och inte en klickbar
+ * rad: den går att träffa med tummen, fungerar med tangentbord och läses upp
+ * rätt av skärmläsare.
  *
  * Bocken sparas inte. Nästa gång man lagar rätten börjar man om ändå.
+ *
+ * Returnerar rutan tillsammans med raden. Anroparen behöver den för att veta
+ * vad som är ikryssat – att leta upp den med en väljare efteråt hade knutit
+ * knappen till hur den här funktionen råkar bygga sin uppmärkning.
  */
 function ingredientRow(text) {
   const li = document.createElement('li');
@@ -696,5 +755,5 @@ function ingredientRow(text) {
   box.type = 'checkbox';
   label.append(box, document.createTextNode(text));
   li.append(label);
-  return li;
+  return { li, box };
 }
