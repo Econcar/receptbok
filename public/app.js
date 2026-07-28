@@ -12,6 +12,7 @@ import {
 } from '/session.js';
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
+import { scaleFactor, scaleIngredient } from '/scale.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
   saveHousehold, saveRecipes, savedAgo,
@@ -416,9 +417,24 @@ function recipeCard(recipe) {
   if (ingredients.length) {
     const list = document.createElement('ul');
     list.className = 'ingredients';
-    for (const item of ingredients) {
-      list.append(ingredientRow(item.raw_text));
-    }
+
+    // Ritas om vid varje portionsändring. Bockarna nollställs på köpet, och
+    // det är rätt: ändrar man antalet portioner mäter man upp på nytt.
+    const rita = (faktor) => {
+      list.replaceChildren(...ingredients.map(
+        (item) => ingredientRow(scaleIngredient(item, faktor)),
+      ));
+    };
+
+    // Väljaren kräver två saker: ett portionsantal att utgå från, och minst en
+    // tolkad mängd att räkna om. Saknas det senare – receptet är sparat innan
+    // tolkningen fanns – hade knapparna inte gjort någonting alls när man
+    // tryckte på dem.
+    const gårAttSkala = recipe.servings
+      && ingredients.some((item) => item.quantity !== null && item.quantity !== undefined);
+
+    if (gårAttSkala) details.append(portionsväljare(recipe, rita));
+    rita(1);
     details.append(list);
   }
 
@@ -445,6 +461,48 @@ function recipeCard(recipe) {
   body.append(details);
   li.append(body);
   return li;
+}
+
+/**
+ * Färre eller fler portioner. Ändrar bara ingrediensmängderna – tillagningstid
+ * och ugnstemperatur står kvar, för de följer inte portionsantalet. Det står
+ * utskrivet i stället för att tigas ihjäl.
+ */
+function portionsväljare(recipe, rita) {
+  const rad = document.createElement('p');
+  rad.className = 'portions';
+
+  let antal = recipe.servings;
+
+  const visa = document.createElement('span');
+  visa.className = 'portions-antal';
+
+  const knapp = (tecken, steg) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'stepper';
+    b.textContent = tecken;
+    b.setAttribute('aria-label', steg < 0 ? 'Färre portioner' : 'Fler portioner');
+    b.addEventListener('click', () => {
+      antal = Math.min(99, Math.max(1, antal + steg));
+      uppdatera();
+    });
+    return b;
+  };
+
+  function uppdatera() {
+    visa.textContent = `${antal} portioner`;
+    rad.dataset.skalad = antal === recipe.servings ? 'false' : 'true';
+    rita(scaleFactor(recipe.servings, antal));
+  }
+
+  const etikett = document.createElement('span');
+  etikett.className = 'source';
+  etikett.textContent = 'Mängderna skalas – tiden och ugnsvärmen gör det inte.';
+
+  rad.append(knapp('−', -1), visa, knapp('+', 1), etikett);
+  uppdatera();
+  return rad;
 }
 
 /**
