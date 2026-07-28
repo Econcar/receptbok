@@ -250,6 +250,31 @@ body {
 
 .shopping label:has(input:checked) { color: var(--muted); text-decoration: line-through; }
 .shopping .source { margin: -0.35rem 0 0.35rem 1.8rem; }
+
+.avdelning {
+  margin-top: 1.25rem;
+  padding: 0.35rem 0 0.2rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.shopping li:first-child.avdelning { margin-top: 0; }
+
+.avdelningsval {
+  margin-left: auto;
+  padding: 0.2rem 0.3rem;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.avdelningsval:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .addrow { margin-top: 1rem; }
 
 .card {

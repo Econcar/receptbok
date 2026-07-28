@@ -13,6 +13,7 @@ import {
   startSession,
 } from '/session.js';
 import { buildShoppingList, formatItem, normalizeName } from '/shopping.js';
+import { groupByCategory, KATEGORIER } from '/categories.js';
 
 const DAGAR = 7;
 
@@ -36,6 +37,7 @@ let household = null;
 let recipes = [];
 let plan = [];
 let sparade = [];
+let varor = [];
 let senasteHämtning = 0;
 
 /**
@@ -138,13 +140,14 @@ async function ladda() {
   const från = isoDatum(dagar[0]);
   const till = isoDatum(dagar.at(-1));
 
-  [recipes, plan, sparade] = await Promise.all([
+  [recipes, plan, sparade, varor] = await Promise.all([
     client.rest('recipes?select=id,title,servings,'
       + 'recipe_ingredients(raw_text,quantity,unit,name,note)'
       + `&household_id=eq.${household.id}&order=title.asc`),
     client.rest('meal_plan?select=id,date,servings,recipe_id'
       + `&household_id=eq.${household.id}&date=gte.${från}&date=lte.${till}&order=date.asc`),
     client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`),
+    client.rest(`ingredients?select=name,category&household_id=eq.${household.id}`),
   ]);
 
   senasteHämtning = Date.now();
@@ -255,6 +258,49 @@ async function taBort(id) {
 /** Nyckeln som binder en uträknad rad till sin sparade bock. */
 const bockNyckel = (name, unit) => `${normalizeName(name)}|${unit ?? ''}`;
 
+/**
+ * Kategorin sitter på varans namn, inte på raden. Sätter man mjölk till mejeri
+ * gäller det överallt mjölk dyker upp, i det här receptet och nästa.
+ */
+const kategoriFör = (rad) => {
+  const namn = normalizeName(rad.egen ? rad.egen.name : rad.post.name);
+  return varor.find((vara) => vara.name === namn)?.category ?? null;
+};
+
+async function sättKategori(namn, category) {
+  await client.rest('ingredients?on_conflict=household_id,name', {
+    method: 'POST',
+    body: { household_id: household.id, name: normalizeName(namn), category: category || null },
+    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+  });
+
+  varor = await client.rest(`ingredients?select=name,category&household_id=eq.${household.id}`);
+  renderLista();
+}
+
+/** Väljaren som säger vilken avdelning varan står i. */
+function kategoriväljare(namn, nuvarande) {
+  const select = document.createElement('select');
+  select.className = 'avdelningsval';
+  select.setAttribute('aria-label', `Avdelning för ${namn}`);
+
+  const tom = document.createElement('option');
+  tom.value = '';
+  tom.textContent = '– avdelning –';
+  select.append(tom);
+
+  for (const kategori of KATEGORIER) {
+    const option = document.createElement('option');
+    option.value = kategori.id;
+    option.textContent = kategori.namn;
+    select.append(option);
+  }
+
+  select.value = nuvarande ?? '';
+  select.addEventListener('change', guard(() => sättKategori(namn, select.value)));
+  return select;
+}
+
 function renderLista() {
   const uträknad = buildShoppingList(plan.map((rad) => ({
     recipe: receptet(rad.recipe_id),
@@ -268,10 +314,23 @@ function renderLista() {
 
   const egna = sparade.filter((rad) => rad.source === 'manual');
 
-  els.list.replaceChildren(
-    ...uträknad.map((post) => listrad(post, bockar.get(bockNyckel(post.name, post.unit)))),
-    ...egna.map((rad) => egenRad(rad)),
-  );
+  const rader = [
+    ...uträknad.map((post) => ({ post, bock: bockar.get(bockNyckel(post.name, post.unit)) })),
+    ...egna.map((rad) => ({ egen: rad })),
+  ];
+
+  // Grupperat per butiksavdelning, i butikens ordning och inte bokstavernas.
+  // Okategoriserat hamnar sist – de raderna har man ännu inte tagit ställning
+  // till, och de ska inte stå i vägen för dem man har.
+  els.list.replaceChildren(...groupByCategory(rader, kategoriFör).flatMap((grupp) => {
+    const rubrik = document.createElement('li');
+    rubrik.className = 'avdelning';
+    rubrik.textContent = grupp.namn;
+
+    return [rubrik, ...grupp.items.map(
+      (rad) => (rad.egen ? egenRad(rad.egen) : listrad(rad.post, rad.bock)),
+    )];
+  }));
 
   const ungefärliga = uträknad.filter((post) => post.approximate).length;
   const delar = [`${uträknad.length + egna.length} varor`];
@@ -304,6 +363,7 @@ function listrad(post, bock) {
     label.append(flagga);
   }
 
+  label.append(kategoriväljare(post.name, kategoriFör({ post })));
   li.append(label);
 
   if (post.recipes?.length) {
@@ -334,7 +394,7 @@ function egenRad(rad) {
 
   const text = document.createElement('span');
   text.textContent = rad.name;
-  label.append(box, text);
+  label.append(box, text, kategoriväljare(rad.name, kategoriFör({ egen: rad })));
   li.append(label);
 
   const bort = document.createElement('button');

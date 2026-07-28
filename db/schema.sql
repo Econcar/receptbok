@@ -179,6 +179,30 @@ create table if not exists public.shopping_list_items (
 create index if not exists shopping_list_household_idx
   on public.shopping_list_items (household_id);
 
+-- Butiksavdelning per vara, så att inköpslistan följer gångarna i stället för
+-- bokstavsordningen.
+--
+-- name är varans namn precis som inköpslistan grupperar på det, gemenformat.
+-- Alltså är "vispgrädde" och "matlagningsgrädde" i dag två rader här, och två
+-- rader i butiken. Det är avsiktligt: att avgöra vad som är samma vara kräver
+-- att en människa säger det, och den delen är inte byggd.
+--
+-- När den byggs blir det en kolumn till här – canonical_id som pekar på en
+-- annan rad i samma tabell – och inte en omskrivning. Kategorierna som fylls i
+-- nu överlever alltså det steget.
+create table if not exists public.ingredients (
+  id           uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households(id) on delete cascade,
+  name         text not null check (name = lower(btrim(name)) and length(name) > 0),
+  category     text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  unique (household_id, name)
+);
+
+create index if not exists ingredients_household_idx
+  on public.ingredients (household_id);
+
 -- Inbjudningar. En delbar länk och inte en inmatad e-postadress: adressen
 -- kräver att man vet exakt vilket Google-konto den andra loggar in med, och
 -- gissar man fel händer ingenting alls. Ett tyst fel är sämre än ett synligt.
@@ -282,6 +306,11 @@ create trigger shopping_list_items_touch_updated_at
   before update on public.shopping_list_items
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists ingredients_touch_updated_at on public.ingredients;
+create trigger ingredients_touch_updated_at
+  before update on public.ingredients
+  for each row execute function public.touch_updated_at();
+
 -- Utan det här blir den som skapar ett hushåll utelåst från det direkt: bara
 -- ägare får lägga till medlemmar, och ingen är ägare förrän första raden finns.
 create or replace function public.add_creator_as_owner()
@@ -372,6 +401,7 @@ alter table public.recipe_tags        enable row level security;
 alter table public.meal_plan          enable row level security;
 alter table public.shopping_list_items enable row level security;
 alter table public.household_invites  enable row level security;
+alter table public.ingredients        enable row level security;
 
 -- Policyer skrivs om vid varje körning, så skriptet förblir idempotent.
 
@@ -482,6 +512,12 @@ create policy "hushållets inköpslista"
 -- Den som ska lösa in en inbjudan går inte via de här policyerna alls, utan
 -- via redeem_household_invite – annars hade vem som helst kunnat lista
 -- inbjudningar och gå in genom vilken dörr som helst.
+drop policy if exists "hushållets varor" on public.ingredients;
+create policy "hushållets varor"
+  on public.ingredients for all to authenticated
+  using (public.is_household_member(household_id))
+  with check (public.is_household_member(household_id));
+
 drop policy if exists "medlemmar ser inbjudningar" on public.household_invites;
 create policy "medlemmar ser inbjudningar"
   on public.household_invites for select to authenticated
@@ -507,12 +543,12 @@ revoke all on public.households, public.household_members,
               public.recipes, public.recipe_ingredients,
               public.tags, public.recipe_tags,
               public.meal_plan, public.shopping_list_items,
-              public.household_invites from anon;
+              public.household_invites, public.ingredients from anon;
 
 grant select, insert, update, delete
   on public.households, public.household_members,
      public.recipes, public.recipe_ingredients,
      public.tags, public.recipe_tags,
      public.meal_plan, public.shopping_list_items,
-     public.household_invites
+     public.household_invites, public.ingredients
   to authenticated;

@@ -175,6 +175,19 @@ begin
   insert into public.shopping_list_items (household_id, name, unit, quantity)
   values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'mjölk', 'l', 1);
 
+  insert into public.ingredients (household_id, name, category)
+  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'mjölk', 'mejeri');
+
+  -- Gemenformat är ett villkor i schemat även här, av samma skäl som för
+  -- kategorierna: annars blir Mjölk och mjölk två varor som ser likadana ut.
+  begin
+    insert into public.ingredients (household_id, name, category)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Grädde', 'mejeri');
+    raise exception 'Versalt varunamn accepterades – dubbletter blir möjliga';
+  exception when check_violation then
+    null; -- rätt beteende
+  end;
+
   begin
     insert into public.shopping_list_items (household_id, name)
     values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'kapad vara');
@@ -250,6 +263,9 @@ begin
 
   select count(*) into n from public.household_invites;
   if n <> 0 then raise exception 'Bertil ser Annas inbjudningar – RLS läcker'; end if;
+
+  select count(*) into n from public.ingredients;
+  if n <> 0 then raise exception 'Bertil ser Annas varukategorier – RLS läcker'; end if;
 end $$;
 
 -- --- Inbjudan --------------------------------------------------------------
