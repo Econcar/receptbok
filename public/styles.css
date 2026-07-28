@@ -209,6 +209,20 @@ body {
 
 .tagadmin .tag { flex: none; }
 .tagadmin .source { flex: 1; margin: 0; }
+.tagadmin form { flex: 1; gap: 0.6rem; }
+
+.tagadmin input {
+  flex: 1;
+  min-width: 8rem;
+  max-width: 16rem;
+  padding: 0.3rem 0.55rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
 
 .nytagg { display: inline-flex; }
 
