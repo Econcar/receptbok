@@ -1,9 +1,8 @@
-// Veckoplanen och inköpslistan som följer av den.
+// Veckoplanen: vilka rätter som ska lagas vilka dagar.
 //
-// Listan lagras inte – den räknas fram ur planen varje gång sidan visas. Det
-// som lagras är bara det som inte går att räkna fram: vad som är avbockat och
-// vad man lagt till för hand. En sparad lista hade genast kunnat säga emot
-// planen, och då vet man inte vilken som gäller.
+// Inköpslistan ligger på /inkopslistan och räknas fram ur den här planen.
+// Sidorna är åtskilda för att situationerna är det: planen görs vid
+// köksbordet, listan läses i butiken med en hand.
 //
 // Sju dagar från i dag, inte måndag till söndag. "Vilken vecka menar du" är en
 // fråga ingen vill ställa sig framför kylskåpet.
@@ -12,8 +11,6 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
   startSession,
 } from '/session.js';
-import { buildShoppingList, formatItem, normalizeName } from '/shopping.js';
-import { groupByCategory, KATEGORIER } from '/categories.js';
 
 const DAGAR = 7;
 
@@ -26,18 +23,12 @@ const els = {
   planServings: document.getElementById('plan-servings'),
   planHint: document.getElementById('plan-hint'),
   week: document.getElementById('week'),
-  listMeta: document.getElementById('list-meta'),
-  list: document.getElementById('list'),
-  itemForm: document.getElementById('item-form'),
-  newItem: document.getElementById('new-item'),
 };
 
 let client = null;
 let household = null;
 let recipes = [];
 let plan = [];
-let sparade = [];
-let varor = [];
 let senasteHämtning = 0;
 
 /**
@@ -89,10 +80,6 @@ async function start() {
     return planeraIn();
   }));
 
-  els.itemForm.addEventListener('submit', guard((event) => {
-    event.preventDefault();
-    return läggTillEgen();
-  }));
 
   await ladda();
 }
@@ -140,20 +127,16 @@ async function ladda() {
   const från = isoDatum(dagar[0]);
   const till = isoDatum(dagar.at(-1));
 
-  [recipes, plan, sparade, varor] = await Promise.all([
-    client.rest('recipes?select=id,title,servings,'
-      + 'recipe_ingredients(raw_text,quantity,unit,name,note)'
+  [recipes, plan] = await Promise.all([
+    client.rest('recipes?select=id,title,servings'
       + `&household_id=eq.${household.id}&order=title.asc`),
     client.rest('meal_plan?select=id,date,servings,recipe_id'
       + `&household_id=eq.${household.id}&date=gte.${från}&date=lte.${till}&order=date.asc`),
-    client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`),
-    client.rest(`ingredients?select=name,category&household_id=eq.${household.id}`),
   ]);
 
   senasteHämtning = Date.now();
   fyllRecept();
   renderVeckan();
-  renderLista();
 
   setStatus(recipes.length ? 'Ansluten.' : 'Inga recept att planera in ännu.', recipes.length ? 'ok' : 'warn');
 }
@@ -253,210 +236,6 @@ async function taBort(id) {
   await ladda();
 }
 
-// --- Inköpslistan -----------------------------------------------------------
-
-/** Nyckeln som binder en uträknad rad till sin sparade bock. */
-const bockNyckel = (name, unit) => `${normalizeName(name)}|${unit ?? ''}`;
-
-/**
- * Kategorin sitter på varans namn, inte på raden. Sätter man mjölk till mejeri
- * gäller det överallt mjölk dyker upp, i det här receptet och nästa.
- */
-const kategoriFör = (rad) => {
-  const namn = normalizeName(rad.egen ? rad.egen.name : rad.post.name);
-  return varor.find((vara) => vara.name === namn)?.category ?? null;
-};
-
-async function sättKategori(namn, category) {
-  await client.rest('ingredients?on_conflict=household_id,name', {
-    method: 'POST',
-    body: { household_id: household.id, name: normalizeName(namn), category: category || null },
-    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
-  });
-
-  varor = await client.rest(`ingredients?select=name,category&household_id=eq.${household.id}`);
-  renderLista();
-}
-
-/** Väljaren som säger vilken avdelning varan står i. */
-function kategoriväljare(namn, nuvarande) {
-  const select = document.createElement('select');
-  select.className = 'avdelningsval';
-  select.setAttribute('aria-label', `Avdelning för ${namn}`);
-
-  const tom = document.createElement('option');
-  tom.value = '';
-  tom.textContent = '– avdelning –';
-  select.append(tom);
-
-  for (const kategori of KATEGORIER) {
-    const option = document.createElement('option');
-    option.value = kategori.id;
-    option.textContent = kategori.namn;
-    select.append(option);
-  }
-
-  select.value = nuvarande ?? '';
-  select.addEventListener('change', guard(() => sättKategori(namn, select.value)));
-  return select;
-}
-
-function renderLista() {
-  const uträknad = buildShoppingList(plan.map((rad) => ({
-    recipe: receptet(rad.recipe_id),
-    servings: rad.servings,
-  })));
-
-  const bockar = new Map(
-    sparade.filter((rad) => rad.source === 'plan')
-      .map((rad) => [bockNyckel(rad.name, rad.unit), rad]),
-  );
-
-  const egna = sparade.filter((rad) => rad.source === 'manual');
-
-  const rader = [
-    ...uträknad.map((post) => ({ post, bock: bockar.get(bockNyckel(post.name, post.unit)) })),
-    ...egna.map((rad) => ({ egen: rad })),
-  ];
-
-  // Grupperat per butiksavdelning, i butikens ordning och inte bokstavernas.
-  // Okategoriserat hamnar sist – de raderna har man ännu inte tagit ställning
-  // till, och de ska inte stå i vägen för dem man har.
-  els.list.replaceChildren(...groupByCategory(rader, kategoriFör).flatMap((grupp) => {
-    const rubrik = document.createElement('li');
-    rubrik.className = 'avdelning';
-    rubrik.textContent = grupp.namn;
-
-    return [rubrik, ...grupp.items.map(
-      (rad) => (rad.egen ? egenRad(rad.egen) : listrad(rad.post, rad.bock)),
-    )];
-  }));
-
-  const ungefärliga = uträknad.filter((post) => post.approximate).length;
-  const delar = [`${uträknad.length + egna.length} varor`];
-  if (ungefärliga) {
-    delar.push(`${ungefärliga} ungefärliga – skalade portioner följer inte kryddmåtten`);
-  }
-  els.listMeta.textContent = uträknad.length || egna.length
-    ? delar.join(' · ')
-    : 'Listan fylls av det du planerar in ovan.';
-}
-
-function listrad(post, bock) {
-  const li = document.createElement('li');
-  const label = document.createElement('label');
-
-  const box = document.createElement('input');
-  box.type = 'checkbox';
-  box.checked = Boolean(bock?.checked);
-  box.addEventListener('change', guard(() => bocka(post, box.checked)));
-
-  const text = document.createElement('span');
-  text.textContent = formatItem(post);
-  label.append(box, text);
-
-  if (post.approximate) {
-    const flagga = document.createElement('span');
-    flagga.className = 'tag';
-    flagga.textContent = 'ca';
-    flagga.title = 'Mängden är skalad efter portioner och är ungefärlig';
-    label.append(flagga);
-  }
-
-  label.append(kategoriväljare(post.name, kategoriFör({ post })));
-  li.append(label);
-
-  if (post.recipes?.length) {
-    const källa = document.createElement('p');
-    källa.className = 'source';
-    källa.textContent = post.recipes.join(', ');
-    li.append(källa);
-  }
-
-  return li;
-}
-
-function egenRad(rad) {
-  const li = document.createElement('li');
-  const label = document.createElement('label');
-
-  const box = document.createElement('input');
-  box.type = 'checkbox';
-  box.checked = rad.checked;
-  box.addEventListener('change', guard(async () => {
-    await client.rest(`shopping_list_items?id=eq.${rad.id}`, {
-      method: 'PATCH',
-      body: { checked: box.checked },
-      headers: { prefer: 'return=minimal' },
-    });
-    rad.checked = box.checked;
-  }));
-
-  const text = document.createElement('span');
-  text.textContent = rad.name;
-  label.append(box, text, kategoriväljare(rad.name, kategoriFör({ egen: rad })));
-  li.append(label);
-
-  const bort = document.createElement('button');
-  bort.type = 'button';
-  bort.className = 'linkbutton';
-  bort.textContent = 'Ta bort';
-  bort.addEventListener('click', guard(async () => {
-    await client.rest(`shopping_list_items?id=eq.${rad.id}`, {
-      method: 'DELETE',
-      headers: { prefer: 'return=minimal' },
-    });
-    await ladda();
-  }));
-  li.append(bort);
-
-  return li;
-}
-
-/**
- * En bock på en uträknad rad sparas som en egen rad med source='plan'.
- * Avbockningen tas bort igen – ändras planen försvinner bocken med varan,
- * vilket är rätt: har man inte varan i listan har man inte köpt den heller.
- */
-async function bocka(post, checked) {
-  if (!checked) {
-    await client.rest(
-      `shopping_list_items?household_id=eq.${household.id}&source=eq.plan`
-      + `&name=eq.${encodeURIComponent(post.name)}`
-      + (post.unit ? `&unit=eq.${encodeURIComponent(post.unit)}` : '&unit=is.null'),
-      { method: 'DELETE', headers: { prefer: 'return=minimal' } },
-    );
-  } else {
-    await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
-      method: 'POST',
-      body: {
-        household_id: household.id,
-        name: post.name,
-        unit: post.unit,
-        quantity: post.quantity,
-        checked: true,
-        source: 'plan',
-      },
-      headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
-    });
-  }
-
-  sparade = await client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`);
-}
-
-async function läggTillEgen() {
-  const name = els.newItem.value.trim();
-  if (!name) return;
-
-  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
-    method: 'POST',
-    body: { household_id: household.id, name, source: 'manual' },
-    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
-  });
-
-  els.newItem.value = '';
-  await ladda();
-}
 
 function numberOrNull(value) {
   const n = Number.parseInt(value, 10);

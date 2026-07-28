@@ -85,6 +85,12 @@ create table if not exists public.recipes (
 alter table public.recipes
   alter column created_by set default auth.uid();
 
+-- Favoriter är hushållets, inte den enskildes. Allt annat i appen är delat –
+-- recepten, kategorierna, veckoplanen, inköpslistan – och en stjärna som
+-- betyder olika saker för olika medlemmar vore det enda undantaget.
+alter table public.recipes
+  add column if not exists is_favorite boolean not null default false;
+
 create index if not exists recipes_household_idx on public.recipes (household_id);
 
 create table if not exists public.recipe_ingredients (

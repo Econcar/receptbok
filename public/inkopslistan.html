@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inköpslistan · Receptbok</title>
+<meta name="description" content="Veckans inköpslista, grupperad per butiksavdelning.">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Inköpslistan</h1>
+  <p class="tagline"><a href="/">← Recepten</a> · <a href="/veckan">Veckan</a></p>
+  <div class="account" id="account" hidden>
+    <span id="account-name"></span>
+    <button type="button" id="signout" class="linkbutton">Logga ut</button>
+  </div>
+</header>
+
+<main>
+  <p id="status" class="status" role="status">Kontrollerar …</p>
+
+  <section class="panel" id="gate" hidden>
+    <p>Gå till <a href="/">startsidan</a> för att logga in och skapa ditt hushåll.</p>
+  </section>
+
+  <div id="listwrap" hidden>
+    <p class="muted" id="list-meta"></p>
+    <ul id="list" class="shopping"></ul>
+
+    <form class="form addrow" id="item-form">
+      <label class="sr-only" for="new-item">Lägg till en egen vara</label>
+      <input type="text" id="new-item" maxlength="80" autocomplete="off"
+             placeholder="Lägg till något själv – t.ex. kaffe">
+      <button type="submit" class="button">Lägg till</button>
+    </form>
+
+    <p class="muted">
+      <button type="button" class="linkbutton" id="clear-checked">Rensa avbockade</button>
+    </p>
+  </div>
+</main>
+
+<footer class="footer">
+  <span id="meta"></span>
+</footer>
+
+<script type="module" src="/inkopslistan.js"></script>
+</body>
+</html>

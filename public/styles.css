@@ -430,3 +430,21 @@ body {
 @media (min-width: 720px) {
   body { max-width: 60rem; margin: 0 auto; }
 }
+
+/* Sitter utanför details, så favoritmarkering går att göra medan man bläddrar
+   utan att receptet fälls ut. */
+.stjarna {
+  align-self: start;
+  padding: 0.1rem 0.3rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.stjarna[data-active="true"] { color: #fbbf24; }
+.stjarna:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card { position: relative; }
+.card .stjarna { position: absolute; top: 0.5rem; right: 0.6rem; }

@@ -14,7 +14,7 @@
 <body>
 <header class="topbar">
   <h1>Veckan</h1>
-  <p class="tagline"><a href="/">← Tillbaka till recepten</a></p>
+  <p class="tagline"><a href="/">← Recepten</a> · <a href="/inkopslistan">Inköpslistan</a></p>
   <div class="account" id="account" hidden>
     <span id="account-name"></span>
     <button type="button" id="signout" class="linkbutton">Logga ut</button>
@@ -57,16 +57,8 @@
     </section>
 
     <section>
-      <h2 class="sectionhead">Inköpslista</h2>
-      <p class="muted" id="list-meta"></p>
-      <ul id="list" class="shopping"></ul>
-
-      <form class="form addrow" id="item-form">
-        <label class="sr-only" for="new-item">Lägg till en egen vara</label>
-        <input type="text" id="new-item" maxlength="80" autocomplete="off"
-               placeholder="Lägg till något själv – t.ex. kaffe">
-        <button type="submit" class="button">Lägg till</button>
-      </form>
+      <p class="muted">Inköpslistan räknas fram ur den här planen.</p>
+      <a class="button" href="/inkopslistan">Öppna inköpslistan</a>
     </section>
   </div>
 </main>

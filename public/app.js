@@ -150,7 +150,7 @@ async function show(client) {
 }
 
 const SELECT = 'recipes?select=id,title,image_url,source_url,source_name,servings,'
-  + 'total_time_min,instructions,'
+  + 'total_time_min,instructions,is_favorite,'
   + 'recipe_ingredients(id,recipe_id,raw_text,position,quantity,unit,name,note),'
   + 'recipe_tags(tags(id,name))';
 
@@ -317,6 +317,14 @@ function renderFilters() {
     renderRecipes();
   }));
 
+  if (recipes.some((recipe) => recipe.is_favorite)) {
+    els.filters.append(chip('★ Favoriter', activeTag === 'favorit', () => {
+      activeTag = activeTag === 'favorit' ? null : 'favorit';
+      renderFilters();
+      renderRecipes();
+    }));
+  }
+
   for (const [id, name] of [...used].sort((a, b) => a[1].localeCompare(b[1], 'sv'))) {
     els.filters.append(chip(name, activeTag === id, () => {
       activeTag = activeTag === id ? null : id;
@@ -338,8 +346,10 @@ function chip(label, active, onClick) {
 
 function renderRecipes() {
   const visible = recipes.filter((recipe) => {
+    // 'favorit' är inte en kategori utan ett eget filter. Det ligger bland
+    // kategoriknapparna för att det är där man letar efter det.
     const rättKategori = activeTag === null
-      || tagsOf(recipe).some((tag) => tag.id === activeTag);
+      || (activeTag === 'favorit' ? recipe.is_favorite : tagsOf(recipe).some((tag) => tag.id === activeTag));
     return rättKategori && matchesQuery(recipe, query);
   });
 
@@ -391,6 +401,10 @@ function recipeCard(recipe) {
   summary.textContent = recipe.title;
   details.append(summary);
 
+  // Stjärnan sitter utanför details, så den går att klicka utan att fälla ut
+  // receptet – man markerar favoriter medan man bläddrar, inte medan man lagar.
+  li.append(stjärna(recipe));
+
   const facts = [
     recipe.servings ? `${recipe.servings} portioner` : null,
     recipe.total_time_min ? `${recipe.total_time_min} min` : null,
@@ -410,12 +424,14 @@ function recipeCard(recipe) {
     .sort((a, b) => a.position - b.position);
 
   if (ingredients.length) {
+    let faktor = 1;
     const list = document.createElement('ul');
     list.className = 'ingredients';
 
     // Ritas om vid varje portionsändring. Bockarna nollställs på köpet, och
     // det är rätt: ändrar man antalet portioner mäter man upp på nytt.
-    const rita = (faktor) => {
+    const rita = (ny) => {
+      faktor = ny;
       list.replaceChildren(...ingredients.map(
         (item) => ingredientRow(scaleIngredient(item, faktor)),
       ));
@@ -431,6 +447,13 @@ function recipeCard(recipe) {
     if (gårAttSkala) details.append(portionsväljare(recipe, rita));
     rita(1);
     details.append(list);
+
+    const handla = document.createElement('button');
+    handla.type = 'button';
+    handla.className = 'linkbutton';
+    handla.textContent = 'Lägg ingredienserna i inköpslistan';
+    handla.addEventListener('click', guard(() => läggIInköpslista(recipe, faktor)));
+    details.append(handla);
   }
 
   if (recipe.instructions?.length) {
@@ -456,6 +479,94 @@ function recipeCard(recipe) {
   body.append(details);
   li.append(body);
   return li;
+}
+
+/**
+ * Favoritmarkering. Hushållets, inte den enskildes – allt annat i appen är
+ * delat, och en stjärna som betyder olika saker för olika medlemmar vore det
+ * enda undantaget.
+ */
+function stjärna(recipe) {
+  const knapp = document.createElement('button');
+  knapp.type = 'button';
+  knapp.className = 'stjarna';
+  knapp.textContent = recipe.is_favorite ? '★' : '☆';
+  knapp.dataset.active = String(Boolean(recipe.is_favorite));
+  knapp.title = recipe.is_favorite ? 'Ta bort som favorit' : 'Markera som favorit';
+  knapp.setAttribute('aria-pressed', String(Boolean(recipe.is_favorite)));
+
+  knapp.addEventListener('click', guard(async () => {
+    const nytt = !recipe.is_favorite;
+    await client.rest(`recipes?id=eq.${recipe.id}`, {
+      method: 'PATCH',
+      body: { is_favorite: nytt },
+      headers: { prefer: 'return=minimal' },
+    });
+
+    recipe.is_favorite = nytt;
+    saveRecipes(recipes, household.id);
+    knapp.textContent = nytt ? '★' : '☆';
+    knapp.dataset.active = String(nytt);
+    knapp.setAttribute('aria-pressed', String(nytt));
+    renderFilters();
+  }));
+
+  return knapp;
+}
+
+/**
+ * Lägger receptets ingredienser i inköpslistan, utan att gå via veckoplanen.
+ *
+ * Mängderna följer portionsväljaren: har man ställt om till sex portioner är
+ * det sex portioner man handlar till. Rader utan mängd – "salt efter smak" –
+ * följer med utan mängd, för de ska ändå stå på listan om man saknar salt.
+ *
+ * Finns varan redan som handtillagd summeras mängden i stället för att skrivas
+ * över. "Lägg till" ska lägga till.
+ */
+async function läggIInköpslista(recipe, faktor) {
+  const rader = (recipe.recipe_ingredients ?? [])
+    .map((rad) => ({
+      name: (rad.name || rad.raw_text || '').trim(),
+      unit: rad.unit ?? null,
+      quantity: rad.quantity === null || rad.quantity === undefined
+        ? null
+        : Math.round(rad.quantity * faktor * 1000) / 1000,
+    }))
+    .filter((rad) => rad.name);
+
+  if (!rader.length) {
+    setStatus('Receptet har inga ingredienser att lägga till.', 'warn');
+    return;
+  }
+
+  setStatus('Lägger i inköpslistan …');
+
+  const befintliga = await client.rest(
+    `shopping_list_items?select=name,unit,quantity&household_id=eq.${household.id}&source=eq.manual`,
+  );
+  const nyckel = (r) => `${r.name.toLowerCase()}|${r.unit ?? ''}`;
+  const fanns = new Map(befintliga.map((r) => [nyckel(r), r]));
+
+  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
+    method: 'POST',
+    body: rader.map((rad) => {
+      const gammal = fanns.get(nyckel(rad));
+      const summa = rad.quantity === null && gammal?.quantity == null
+        ? null
+        : Number(gammal?.quantity ?? 0) + Number(rad.quantity ?? 0);
+      return {
+        household_id: household.id,
+        name: rad.name,
+        unit: rad.unit,
+        quantity: summa,
+        source: 'manual',
+      };
+    }),
+    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+  });
+
+  setStatus(`${rader.length} rader lagda i inköpslistan.`, 'ok');
 }
 
 /**

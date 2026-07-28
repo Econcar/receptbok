@@ -156,6 +156,44 @@ test('tom plan ger tom lista', () => {
   assert.deepEqual(buildShoppingList([{ recipe: null }]), []);
 });
 
+test('handtillagt slås ihop med planens', () => {
+  // Att stå med två mjölkrader för att den ena kom från en knapp och den andra
+  // från veckoplanen är precis den sortens fel som får en att sluta lita på
+  // listan.
+  const lista = buildShoppingList(
+    [rätt('Pannkakor', null, [['mjölk', 6, 'dl']])],
+    [{ name: 'mjölk', quantity: 3, unit: 'dl' }],
+  );
+
+  assert.equal(lista.length, 1);
+  assert.equal(rad(lista, 'mjölk').quantity, 9);
+  assert.equal(rad(lista, 'mjölk').manuellt, true);
+  assert.deepEqual(rad(lista, 'mjölk').recipes, ['Pannkakor']);
+});
+
+test('handtillagt räknas om precis som planens mått', () => {
+  const lista = buildShoppingList(
+    [rätt('A', null, [['grädde', 2, 'dl']])],
+    [{ name: 'grädde', quantity: 2, unit: 'msk' }],
+  );
+
+  assert.equal(lista.length, 1);
+  assert.equal(rad(lista, 'grädde').quantity, 2.3, '200 ml + 30 ml');
+});
+
+test('handtillagt utan motsvarighet i planen blir en egen rad', () => {
+  const lista = buildShoppingList([], [{ name: 'kaffe', quantity: null, unit: null }]);
+
+  assert.equal(lista.length, 1);
+  assert.equal(rad(lista, 'kaffe').manuellt, true);
+  assert.deepEqual(rad(lista, 'kaffe').recipes, [], 'ingen rätt att hänvisa till');
+});
+
+test('en rad ur enbart planen är inte manuell', () => {
+  const lista = buildShoppingList([rätt('A', null, [['mjölk', 6, 'dl']])]);
+  assert.equal(rad(lista, 'mjölk').manuellt, false);
+});
+
 test('raden skrivs som man läser den i butiken', () => {
   assert.equal(formatItem({ name: 'grädde', quantity: 2.5, unit: 'dl' }), '2,5 dl grädde');
   assert.equal(formatItem({ name: 'ägg', quantity: 3, unit: 'st' }), '3 st ägg');

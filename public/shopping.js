@@ -44,10 +44,24 @@ export function normalizeName(name) {
 
 /**
  * @param {Array<{recipe: object, servings: number|null}>} poster veckans rätter
- * @returns {Array<{name, quantity, unit, approximate, recipes: string[]}>}
+ * @param {Array<{name, quantity, unit}>} egna rader man lagt till för hand
+ * @returns {Array<{name, quantity, unit, approximate, manuellt, recipes: string[]}>}
  */
-export function buildShoppingList(poster) {
+export function buildShoppingList(poster, egna = []) {
   const grupper = new Map();
+
+  // Handtillagda rader går genom samma sammanslagning som planens. Att stå med
+  // två mjölkrader för att den ena kom från en knapp och den andra från en
+  // veckoplan är precis den sortens fel som får en att sluta lita på listan.
+  for (const rad of egna ?? []) {
+    if (!normalizeName(rad?.name)) continue;
+    const grupp = hämtaGrupp(grupper, rad.name, rad.unit);
+    grupp.manuellt = true;
+    if (rad.quantity !== null && rad.quantity !== undefined) {
+      const f = familj(rad.unit);
+      grupp.summa = (grupp.summa ?? 0) + rad.quantity * (f ? f.bas : 1);
+    }
+  }
 
   for (const post of poster ?? []) {
     const recipe = post?.recipe;
@@ -62,15 +76,7 @@ export function buildShoppingList(poster) {
       const name = rad.name ?? rad.raw_text;
       if (!normalizeName(name)) continue;
 
-      const k = nyckel(name, rad.unit);
-      const grupp = grupper.get(k) ?? {
-        name: String(name).trim(),
-        unit: rad.unit ?? null,
-        summa: null,
-        approximate: false,
-        recipes: new Set(),
-      };
-
+      const grupp = hämtaGrupp(grupper, name, rad.unit);
       grupp.recipes.add(recipe.title);
 
       if (rad.quantity !== null && rad.quantity !== undefined) {
@@ -79,14 +85,28 @@ export function buildShoppingList(poster) {
         grupp.summa = (grupp.summa ?? 0) + bidrag;
         if (faktor !== 1) grupp.approximate = true;
       }
-
-      grupper.set(k, grupp);
     }
   }
 
   return [...grupper.values()]
     .map(skrivUt)
     .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+}
+
+/** Samma nyckel oavsett varifrån raden kom – det är hela poängen. */
+function hämtaGrupp(grupper, name, unit) {
+  const k = nyckel(name, unit);
+  if (!grupper.has(k)) {
+    grupper.set(k, {
+      name: String(name).trim(),
+      unit: unit ?? null,
+      summa: null,
+      approximate: false,
+      manuellt: false,
+      recipes: new Set(),
+    });
+  }
+  return grupper.get(k);
 }
 
 function skalfaktor(receptets, planerade) {
@@ -99,6 +119,7 @@ function skrivUt(grupp) {
   const gemensamt = {
     name: grupp.name,
     approximate: grupp.approximate,
+    manuellt: grupp.manuellt,
     recipes: [...grupp.recipes],
   };
 
