@@ -101,5 +101,8 @@ innehålla `/rest/v1/`.
 - [x] Fas 4: ingredienstolkning
 - [x] Fas 5: veckoplan + inköpslista
 - [x] Portionsskalning i receptvyn – mängderna räknas om, tiden och ugnsvärmen inte
-- [ ] Fas 6: inbjudan till hushållet
-- [ ] Kanonisk ingredienslista + gruppering per butiksavdelning
+- [x] Butiksavdelningar på inköpslistan – kategori per vara, i butikens ordning
+- [ ] Fas 6: inbjudan till hushållet – byggd och utrullad, oprövad
+- [ ] Kanonisk ingredienslista – gör `citron`, `citroner` och `vispgrädde` till
+      en vara i stället för tre. Kräver att en människa säger vad som hör ihop;
+      svensk pluralböjning går inte att gissa sig till
