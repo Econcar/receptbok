@@ -179,7 +179,29 @@ body {
 /* Ett öppnat recept läses i köket och ska få hela bredden. */
 .card:has(details[open]) { grid-column: 1 / -1; }
 
-.tagbar { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0 0; }
+.tagbar { margin: 0.6rem 0 0; gap: 0.3rem; }
+
+.chip-liten { padding: 0.15rem 0.55rem; font-size: 0.78rem; }
+
+/* Ovalda kategorier tonas ner: de är valbara, inte satta. Utan skillnaden ser
+   receptet ut att tillhöra tolv kategorier i stället för två. */
+.chip-liten:not([data-active="true"]) { color: var(--muted); opacity: 0.55; }
+.chip-liten:not([data-active="true"]):hover { opacity: 1; }
+
+.nytagg { display: inline-flex; }
+
+.nytagg input {
+  width: 6rem;
+  padding: 0.15rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--text);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+}
+
+.nytagg input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .tag {
   padding: 0.1rem 0.5rem;

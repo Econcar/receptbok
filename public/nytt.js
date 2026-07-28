@@ -10,12 +10,7 @@ import {
 } from '/session.js';
 import { looksSwedish } from '/lang.js';
 import { parseIngredients } from '/ingredients.js';
-
-// Förslag, inte en fast lista. Egna kategorier skrivs in i fältet bredvid.
-const FÖRSLAG = [
-  'middag', 'frukost', 'lunch', 'vegetariskt', 'kött', 'fisk',
-  'soppa', 'pasta', 'sallad', 'bak', 'efterrätt', 'snabbt',
-];
+import { normalizeTag, upsertTags, valbara } from '/tags.js';
 
 const els = {
   gate: document.getElementById('gate'),
@@ -43,6 +38,8 @@ let client = null;
 /** Det importen läste men formuläret inte visar. Följer med till databasen. */
 let pending = { source_name: null, source_ldjson: null };
 let chosen = new Set();
+/** Hushållets befintliga kategorier, så att egna dyker upp som förslag nästa gång. */
+let hushålletsTags = [];
 
 registerServiceWorker();
 showVersion();
@@ -73,6 +70,9 @@ async function start() {
   }
 
   els.editorWrap.hidden = false;
+  hushålletsTags = await client.rest(
+    `tags?select=id,name&household_id=eq.${household.id}&order=name.asc`,
+  );
   renderChips();
   setStatus(`Lägger till i ${household.name}.`);
 
@@ -99,9 +99,7 @@ async function start() {
 // --- Kategorier -------------------------------------------------------------
 
 function renderChips() {
-  const alla = [...new Set([...FÖRSLAG, ...chosen])].sort((a, b) => a.localeCompare(b, 'sv'));
-
-  els.chips.replaceChildren(...alla.map((name) => {
+  els.chips.replaceChildren(...valbara(hushålletsTags, [...chosen]).map((name) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'chip';
@@ -119,7 +117,7 @@ function renderChips() {
 function addOwnTag() {
   // Gemener är ett villkor i schemat, inte en stilfråga: annars blir
   // "Vegetariskt" och "vegetariskt" två kategorier som ser likadana ut.
-  const name = els.newTag.value.trim().toLowerCase();
+  const name = normalizeTag(els.newTag.value);
   if (!name) return;
   chosen.add(name);
   els.newTag.value = '';
@@ -282,14 +280,8 @@ async function saveRecipe() {
 }
 
 async function saveTags(recipeId) {
-  // Upsert: kategorin kan redan finnas i hushållet sedan ett tidigare recept.
-  // merge-duplicates gör att den befintliga raden returneras i stället för att
-  // unikhetsvillkoret fäller anropet.
-  const tags = await client.rest('tags?on_conflict=household_id,name', {
-    method: 'POST',
-    body: [...chosen].map((name) => ({ household_id: household.id, name })),
-    headers: { prefer: 'return=representation,resolution=merge-duplicates' },
-  });
+  const tags = await upsertTags(client, household.id, [...chosen]);
+  hushålletsTags = tags.length ? [...hushålletsTags, ...tags] : hushålletsTags;
 
   await client.insert(
     'recipe_tags',

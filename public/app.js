@@ -14,6 +14,7 @@ import {
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
 import { scaleFactor, scaleIngredient } from '/scale.js';
+import { normalizeTag, upsertTags, valbara } from '/tags.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
   saveHousehold, saveRecipes, savedAgo,
@@ -43,6 +44,7 @@ const els = {
 let client = null;
 let household = null;
 let recipes = [];
+let hushålletsTags = [];
 let activeTag = null;
 let query = '';
 let öppna = 0;
@@ -153,7 +155,10 @@ const SELECT = 'recipes?select=id,title,image_url,source_url,source_name,serving
 
 async function fetchRecipes(client) {
   try {
-    recipes = await client.rest(`${SELECT}&household_id=eq.${household.id}&order=title.asc`);
+    [recipes, hushålletsTags] = await Promise.all([
+      client.rest(`${SELECT}&household_id=eq.${household.id}&order=title.asc`),
+      client.rest(`tags?select=id,name&household_id=eq.${household.id}&order=name.asc`),
+    ]);
     saveRecipes(recipes, household.id);
     senasteHämtning = Date.now();
     setStatus('Ansluten.', 'ok');
@@ -398,18 +403,7 @@ function recipeCard(recipe) {
     details.append(meta);
   }
 
-  const tags = tagsOf(recipe);
-  if (tags.length) {
-    const bar = document.createElement('p');
-    bar.className = 'tagbar';
-    for (const tag of tags) {
-      const badge = document.createElement('span');
-      badge.className = 'tag';
-      badge.textContent = tag.name;
-      bar.append(badge);
-    }
-    details.append(bar);
-  }
+  details.append(kategoriRad(recipe));
 
   const ingredients = [...(recipe.recipe_ingredients ?? [])]
     .sort((a, b) => a.position - b.position);
@@ -461,6 +455,92 @@ function recipeCard(recipe) {
   body.append(details);
   li.append(body);
   return li;
+}
+
+/**
+ * Kategorierna, klickbara direkt i receptvyn.
+ *
+ * Att kunna sätta dem i efterhand är hela poängen: recept importeras ofta i en
+ * hast och kategoriseras när man har lust. Att behöva mata in receptet på nytt
+ * för att lägga till "middag" hade betytt att ingen gjorde det.
+ */
+function kategoriRad(recipe) {
+  const bar = document.createElement('div');
+  bar.className = 'chips tagbar';
+
+  const rita = () => {
+    const valda = new Set(tagsOf(recipe).map((tag) => normalizeTag(tag.name)));
+
+    bar.replaceChildren(...valbara(hushålletsTags, [...valda]).map((name) => {
+      const knapp = chip(name, valda.has(name), guard(() => växlaTag(recipe, name, rita)));
+      knapp.classList.add('chip-liten');
+      return knapp;
+    }), nyKategoriFält(recipe, rita));
+  };
+
+  rita();
+  return bar;
+}
+
+/** Fält för en kategori som inte finns ännu. */
+function nyKategoriFält(recipe, rita) {
+  const form = document.createElement('form');
+  form.className = 'nytagg';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 40;
+  input.autocomplete = 'off';
+  input.placeholder = '+ egen';
+  input.setAttribute('aria-label', `Ny kategori för ${recipe.title}`);
+
+  form.append(input);
+  form.addEventListener('submit', guard(async (event) => {
+    event.preventDefault();
+    const name = normalizeTag(input.value);
+    if (!name) return;
+    input.value = '';
+    await växlaTag(recipe, name, rita, true);
+  }));
+
+  return form;
+}
+
+/**
+ * Lägger till eller tar bort en kategori på receptet.
+ *
+ * Ritar bara om kategoriraden och filtren, inte hela listan. En omritning hade
+ * fällt ihop receptet man just satt och läser – samma skäl som att omhämtningen
+ * vid flikbyte avstår när något är utfällt.
+ */
+async function växlaTag(recipe, name, rita, baraLäggTill = false) {
+  const nuvarande = tagsOf(recipe);
+  const träff = nuvarande.find((tag) => normalizeTag(tag.name) === name);
+
+  if (träff && !baraLäggTill) {
+    await client.rest(
+      `recipe_tags?recipe_id=eq.${recipe.id}&tag_id=eq.${träff.id}`,
+      { method: 'DELETE', headers: { prefer: 'return=minimal' } },
+    );
+    recipe.recipe_tags = (recipe.recipe_tags ?? [])
+      .filter((rad) => rad.tags?.id !== träff.id);
+  } else if (!träff) {
+    const [tag] = await upsertTags(client, household.id, [name]);
+    if (!tag) return;
+
+    await client.rest('recipe_tags?on_conflict=recipe_id,tag_id', {
+      method: 'POST',
+      body: { recipe_id: recipe.id, tag_id: tag.id },
+      headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+    });
+
+    recipe.recipe_tags = [...(recipe.recipe_tags ?? []), { tags: tag }];
+    if (!hushålletsTags.some((t) => t.id === tag.id)) hushålletsTags.push(tag);
+  }
+
+  saveRecipes(recipes, household.id);
+  rita();
+  renderFilters();
 }
 
 /**
