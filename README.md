@@ -102,6 +102,8 @@ innehålla `/rest/v1/`.
 - [x] Fas 5: veckoplan + inköpslista
 - [x] Portionsskalning i receptvyn – mängderna räknas om, tiden och ugnsvärmen inte
 - [x] Butiksavdelningar på inköpslistan – kategori per vara, i butikens ordning
+- [x] Extravaror på en planerad rätt – sylten till pannkakorna, som följer med
+      ut ur listan när rätten tas ur veckan
 - [ ] Fas 6: inbjudan till hushållet – byggd och utrullad, oprövad
 - [ ] Kanonisk ingredienslista – gör `citron`, `citroner` och `vispgrädde` till
       en vara i stället för tre. Kräver att en människa säger vad som hör ihop;

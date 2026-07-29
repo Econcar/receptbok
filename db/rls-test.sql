@@ -155,12 +155,22 @@ end $$;
 do $$
 declare n integer;
 begin
-  insert into public.meal_plan (household_id, recipe_id, date, servings)
-  values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  insert into public.meal_plan (id, household_id, recipe_id, date, servings)
+  values ('c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
           'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', current_date, 4);
 
   select count(*) into n from public.meal_plan;
   if n <> 1 then raise exception 'Anna ser % planrader, förväntade 1', n; end if;
+
+  -- Extravaror ärver sitt skydd från planposten och har ingen egen
+  -- hushållskolumn. Går kontrollen fel är det ingen som märker det förrän
+  -- någon annans sylt står i ens lista.
+  insert into public.meal_plan_items (meal_plan_id, name, quantity, unit)
+  values ('c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1', 'sylt', 1, 'burk');
+
+  select count(*) into n from public.meal_plan_items;
+  if n <> 1 then raise exception 'Anna ser % extravaror, förväntade 1', n; end if;
 
   -- Bertils recept i Annas plan: hushållet stämmer, receptet gör det inte.
   begin
@@ -247,6 +257,19 @@ begin
 
   select count(*) into n from public.meal_plan;
   if n <> 0 then raise exception 'Bertil ser Annas veckoplan – RLS läcker'; end if;
+
+  select count(*) into n from public.meal_plan_items;
+  if n <> 0 then raise exception 'Bertil ser Annas extravaror – RLS läcker'; end if;
+
+  -- Planposten är Annas, och det är den som avgör. Bertil har ingen egen väg in
+  -- i tabellen: raderna har ingen household_id att stödja sig på.
+  begin
+    insert into public.meal_plan_items (meal_plan_id, name)
+    values ('c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1', 'kapad vara');
+    raise exception 'Bertil kunde hänga en vara på Annas planpost – RLS läcker';
+  exception when insufficient_privilege then
+    null; -- rätt beteende
+  end;
 
   select count(*) into n from public.shopping_list_items;
   if n <> 0 then raise exception 'Bertil ser Annas inköpslista – RLS läcker'; end if;

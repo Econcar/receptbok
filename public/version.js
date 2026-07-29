@@ -8,4 +8,4 @@
 // sw.js CACHE_VERSION, och tests/version.test.mjs ser till att de två aldrig
 // glider isär – en cache som inte byts ut när sidan ändras är precis den sortens
 // fel som ser ut som något annat.
-export const VERSION = 'v30';
+export const VERSION = 'v31';

@@ -29,7 +29,7 @@ export function normalizeName(name) {
 }
 
 /**
- * @param {Array<{recipe: object, servings: number|null}>} poster veckans rätter
+ * @param {Array<{recipe: object, servings: number|null, extra: Array}>} poster veckans rätter
  * @param {Array<{name, quantity, unit}>} egna rader man lagt till för hand
  * @param {Set<string>} dolda gruppnycklar vars planbidrag ska hoppas över
  * @returns {Array<{name, quantity, unit, approximate, manuellt, recipes: string[]}>}
@@ -58,7 +58,17 @@ export function buildShoppingList(poster, egna = [], dolda = new Set()) {
     // att det syns i listan i stället för att tigas ihjäl.
     const faktor = skalfaktor(recipe.servings, post.servings);
 
-    for (const rad of recipe.recipe_ingredients ?? []) {
+    // Extravarorna hör till middagen men inte till receptet: sylten till
+    // pannkakorna, brödet till soppan. De räknas som rättens ingredienser och
+    // står i listan med rättens namn som källa – men de skalas inte. Två paket
+    // bacon är två paket bacon även när man lagar dubbelt, och receptets
+    // faktor säger ingenting om vad någon skrivit dit för hand.
+    const rader = [
+      ...(recipe.recipe_ingredients ?? []).map((rad) => ({ rad, faktor })),
+      ...(post.extra ?? []).map((rad) => ({ rad, faktor: 1 })),
+    ];
+
+    for (const { rad, faktor: skala } of rader) {
       const name = rad.name ?? rad.raw_text;
       if (!normalizeName(name)) continue;
 
@@ -71,8 +81,8 @@ export function buildShoppingList(poster, egna = [], dolda = new Set()) {
       grupp.recipes.add(recipe.title);
 
       if (rad.quantity !== null && rad.quantity !== undefined) {
-        grupp.summa = (grupp.summa ?? 0) + rad.quantity * faktor;
-        if (faktor !== 1) grupp.approximate = true;
+        grupp.summa = (grupp.summa ?? 0) + rad.quantity * skala;
+        if (skala !== 1) grupp.approximate = true;
       }
     }
   }

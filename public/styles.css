@@ -280,6 +280,31 @@ body {
 .day ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
 .day li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
 
+/* Planeringsraden i receptvyn: dag och knapp på samma rad. */
+.planera { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; margin: 0.4rem 0 0; }
+
+/* Extravarorna på en planerad rätt. Egen rad under rätten, indragen, så att
+   det syns att de hör till den och inte till dagen. */
+.day .extra {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  align-items: baseline;
+}
+
+.extravara {
+  display: inline-flex;
+  gap: 0.2rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.extraform { display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }
+.extraform input { width: 11rem; max-width: 100%; }
+
 .shopping { list-style: none; margin: 0; padding: 0; }
 
 .shopping li {

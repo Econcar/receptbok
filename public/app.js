@@ -15,7 +15,7 @@ import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
 import { scaleFactor, scaleIngredient, scaleQuantity } from '/scale.js';
 import { addToList, applyToList, planGroups } from '/shopping.js';
-import { veckansFönster } from '/vecka.js';
+import { dagarna, isoDatum, namnPåDag, veckansFönster } from '/vecka.js';
 import { normalizeTag, valbara } from '/tags.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
@@ -425,8 +425,11 @@ function recipeCard(recipe) {
   const ingredients = [...(recipe.recipe_ingredients ?? [])]
     .sort((a, b) => a.position - b.position);
 
+  // Ligger utanför blocket nedan: planeringsraden behöver den också, och ett
+  // recept utan tolkade ingredienser går fortfarande att planera in.
+  let faktor = 1;
+
   if (ingredients.length) {
-    let faktor = 1;
     const list = document.createElement('ul');
     list.className = 'ingredients';
 
@@ -477,6 +480,8 @@ function recipeCard(recipe) {
     details.append(handla);
   }
 
+  details.append(planeraRad(recipe, () => faktor));
+
   if (recipe.instructions?.length) {
     const steps = document.createElement('ol');
     steps.className = 'steps';
@@ -500,6 +505,49 @@ function recipeCard(recipe) {
   body.append(details);
   li.append(body);
   return li;
+}
+
+/**
+ * Planerar in rätten utan att gå via veckosidan.
+ *
+ * Beslutet fattas här. Att först läsa receptet, sedan byta sida och leta rätt
+ * på titeln i en rulllista är två steg för något man redan bestämt sig för.
+ *
+ * Portionerna följer väljaren ovanför: har man ställt om till sex är det sex
+ * portioner som planeras in, och inköpslistan räknar på dem.
+ */
+function planeraRad(recipe, aktuellFaktor) {
+  const rad = document.createElement('p');
+  rad.className = 'planera';
+
+  const dag = document.createElement('select');
+  dag.setAttribute('aria-label', `Dag att laga ${recipe.title}`);
+  dag.replaceChildren(...dagarna().map((d, index) => {
+    const option = document.createElement('option');
+    option.value = isoDatum(d);
+    option.textContent = namnPåDag(d, index);
+    return option;
+  }));
+
+  const knapp = document.createElement('button');
+  knapp.type = 'button';
+  knapp.className = 'linkbutton';
+  knapp.textContent = 'Lägg i veckan';
+  knapp.addEventListener('click', guard(async () => {
+    setStatus('Lägger i veckan …');
+
+    await client.insert('meal_plan', {
+      household_id: household.id,
+      recipe_id: recipe.id,
+      date: dag.value,
+      servings: recipe.servings ? Math.round(recipe.servings * aktuellFaktor()) : null,
+    }, { returning: 'minimal' });
+
+    setStatus(`${recipe.title} är inlagd i veckan (${dag.selectedOptions[0].textContent}).`, 'ok');
+  }));
+
+  rad.append(dag, knapp);
+  return rad;
 }
 
 /**
@@ -570,7 +618,7 @@ async function läggIInköpslista(ingredienser, faktor) {
   const [sparade, planerat] = await Promise.all([
     client.rest('shopping_list_items?select=id,name,unit,quantity,source,checked,hidden'
       + `&household_id=eq.${household.id}`),
-    client.rest('meal_plan?select=recipe_id,servings'
+    client.rest('meal_plan?select=recipe_id,servings,meal_plan_items(name,quantity,unit)'
       + `&household_id=eq.${household.id}&date=gte.${från}&date=lte.${till}`),
   ]);
 
@@ -579,6 +627,7 @@ async function läggIInköpslista(ingredienser, faktor) {
   const resultat = addToList(rader, sparade, planGroups(planerat.map((rad) => ({
     recipe: recipes.find((recept) => recept.id === rad.recipe_id),
     servings: rad.servings,
+    extra: rad.meal_plan_items ?? [],
   }))));
 
   await applyToList(client, household.id, resultat);

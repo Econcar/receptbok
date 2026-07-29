@@ -30,3 +30,14 @@ export function veckansFönster(idag = new Date()) {
   const dagar = dagarna(idag);
   return { från: isoDatum(dagar[0]), till: isoDatum(dagar.at(-1)) };
 }
+
+/**
+ * Dagens namn som man säger det. "I dag" och "I morgon" är hur man tänker om
+ * de två första, och veckodagen räcker för resten – årtalet säger ingenting
+ * när fönstret ändå bara är sju dagar.
+ */
+export function namnPåDag(d, index) {
+  if (index === 0) return 'I dag';
+  if (index === 1) return 'I morgon';
+  return d.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' });
+}

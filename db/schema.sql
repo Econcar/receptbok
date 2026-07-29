@@ -160,6 +160,30 @@ create table if not exists public.meal_plan (
 create index if not exists meal_plan_household_date_idx
   on public.meal_plan (household_id, date);
 
+-- Det som hör till middagen men inte står i receptet. Sylt till pannkakorna,
+-- bröd till soppan, en flaska vin. Receptet ska inte skrivas om för det –
+-- nästa gång man lagar rätten vill man kanske ha något annat till.
+--
+-- Egen tabell och inte en kolumn på meal_plan, för det är flera rader per rätt
+-- och de ska gå att ta bort en och en. Raderna hänger på planposten och följer
+-- med när den försvinner: tar man bort pannkakorna ur veckan ska sylten inte
+-- bli kvar i listan och gälla ingenting.
+--
+-- Mängden skalas inte med portionerna. Två paket bacon är två paket bacon även
+-- när man lagar dubbelt, och att gissa något annat vore att låtsas veta mer om
+-- middagen än vad någon skrivit ned.
+create table if not exists public.meal_plan_items (
+  id           uuid primary key default gen_random_uuid(),
+  meal_plan_id uuid not null references public.meal_plan(id) on delete cascade,
+  name         text not null check (length(btrim(name)) > 0),
+  unit         text,
+  quantity     numeric,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists meal_plan_items_plan_idx
+  on public.meal_plan_items (meal_plan_id);
+
 -- Inköpslistan räknas fram ur veckoplanen vid varje visning, så själva
 -- raderna lagras inte. Det som lagras är det som inte går att räkna fram:
 -- vad som redan är avbockat, och det man lagt till för hand.
@@ -295,12 +319,32 @@ as $$
   );
 $$;
 
+-- Extravarorna ärver sitt skydd från planposten, precis som ingrediensraderna
+-- ärver sitt från receptet. Definer-funktion av samma skäl: en subquery i
+-- policyn hade träffat meal_plans egna RLS och gett två lager att felsöka.
+create or replace function public.is_plan_in_my_household(pid uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.meal_plan p
+    join public.household_members m on m.household_id = p.household_id
+    where p.id = pid and m.user_id = auth.uid()
+  );
+$$;
+
 revoke execute on function public.is_household_member(uuid)       from public;
 revoke execute on function public.is_household_owner(uuid)        from public;
 revoke execute on function public.is_recipe_in_my_household(uuid) from public;
+revoke execute on function public.is_plan_in_my_household(uuid)   from public;
 grant  execute on function public.is_household_member(uuid)       to authenticated;
 grant  execute on function public.is_household_owner(uuid)        to authenticated;
 grant  execute on function public.is_recipe_in_my_household(uuid) to authenticated;
+grant  execute on function public.is_plan_in_my_household(uuid)   to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Triggers
@@ -414,6 +458,7 @@ alter table public.recipe_ingredients enable row level security;
 alter table public.tags               enable row level security;
 alter table public.recipe_tags        enable row level security;
 alter table public.meal_plan          enable row level security;
+alter table public.meal_plan_items    enable row level security;
 alter table public.shopping_list_items enable row level security;
 alter table public.household_invites  enable row level security;
 alter table public.ingredients        enable row level security;
@@ -517,6 +562,12 @@ create policy "hushållets veckoplan"
     and public.is_recipe_in_my_household(recipe_id)
   );
 
+drop policy if exists "extravaror följer planposten" on public.meal_plan_items;
+create policy "extravaror följer planposten"
+  on public.meal_plan_items for all to authenticated
+  using (public.is_plan_in_my_household(meal_plan_id))
+  with check (public.is_plan_in_my_household(meal_plan_id));
+
 drop policy if exists "hushållets inköpslista" on public.shopping_list_items;
 create policy "hushållets inköpslista"
   on public.shopping_list_items for all to authenticated
@@ -557,13 +608,15 @@ create policy "ägaren återkallar inbjudan"
 revoke all on public.households, public.household_members,
               public.recipes, public.recipe_ingredients,
               public.tags, public.recipe_tags,
-              public.meal_plan, public.shopping_list_items,
+              public.meal_plan, public.meal_plan_items,
+              public.shopping_list_items,
               public.household_invites, public.ingredients from anon;
 
 grant select, insert, update, delete
   on public.households, public.household_members,
      public.recipes, public.recipe_ingredients,
      public.tags, public.recipe_tags,
-     public.meal_plan, public.shopping_list_items,
+     public.meal_plan, public.meal_plan_items,
+     public.shopping_list_items,
      public.household_invites, public.ingredients
   to authenticated;

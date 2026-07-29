@@ -106,7 +106,8 @@ async function ladda() {
     client.rest('recipes?select=id,title,servings,'
       + 'recipe_ingredients(raw_text,quantity,unit,name,note)'
       + `&household_id=eq.${household.id}`),
-    client.rest('meal_plan?select=id,date,servings,recipe_id'
+    client.rest('meal_plan?select=id,date,servings,recipe_id,'
+      + 'meal_plan_items(name,quantity,unit)'
       + `&household_id=eq.${household.id}`
       + `&date=gte.${från}&date=lte.${till}`),
     client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`),
@@ -122,10 +123,11 @@ const receptet = (id) => recipes.find((r) => r.id === id);
 
 const egnaRader = () => sparade.filter((rad) => rad.source === 'manual');
 
-/** Veckans rätter som sammanslagningen vill ha dem. */
+/** Veckans rätter som sammanslagningen vill ha dem, med sina extravaror. */
 const planposter = () => plan.map((rad) => ({
   recipe: receptet(rad.recipe_id),
   servings: rad.servings,
+  extra: rad.meal_plan_items ?? [],
 }));
 
 function render() {

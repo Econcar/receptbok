@@ -11,7 +11,9 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
   startSession,
 } from '/session.js';
-import { dagarna, isoDatum } from '/vecka.js';
+import { dagarna, isoDatum, namnPåDag } from '/vecka.js';
+import { parseIngredient } from '/ingredients.js';
+import { formatItem } from '/shopping.js';
 
 const els = {
   gate: document.getElementById('gate'),
@@ -85,12 +87,6 @@ async function start() {
 
 // --- Datum ------------------------------------------------------------------
 
-const namnPåDag = (d, index) => {
-  if (index === 0) return 'I dag';
-  if (index === 1) return 'I morgon';
-  return d.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' });
-};
-
 function fyllDagar() {
   els.planDay.replaceChildren(...dagarna().map((d, i) => {
     const option = document.createElement('option');
@@ -112,7 +108,8 @@ async function ladda() {
   [recipes, plan] = await Promise.all([
     client.rest('recipes?select=id,title,servings'
       + `&household_id=eq.${household.id}&order=title.asc`),
-    client.rest('meal_plan?select=id,date,servings,recipe_id'
+    client.rest('meal_plan?select=id,date,servings,recipe_id,'
+      + 'meal_plan_items(id,name,quantity,unit)'
       + `&household_id=eq.${household.id}&date=gte.${från}&date=lte.${till}&order=date.asc`),
   ]);
 
@@ -185,12 +182,72 @@ function renderVeckan() {
       bort.textContent = 'Ta bort';
       bort.addEventListener('click', guard(() => taBort(rad.id)));
       rätt.append(bort);
+      rätt.append(extravaror(rad, recipe?.title ?? 'rätten'));
 
       lista.append(rätt);
     }
     li.append(lista);
     return li;
   }));
+}
+
+/**
+ * Det som hör till middagen men inte till receptet.
+ *
+ * Sylten till pannkakorna hör till torsdagen, inte till receptet – nästa gång
+ * man lagar pannkakor vill man kanske ha bär i stället. Därför här och inte
+ * som en ingrediensrad.
+ *
+ * Raderna hänger på planposten och följer med när rätten tas ur veckan. Det är
+ * hela skillnaden mot att skriva dem i inköpslistan: ändrar man sig om
+ * middagen ska man slippa komma ihåg att sylten stod kvar.
+ */
+function extravaror(rad, titel) {
+  const box = document.createElement('div');
+  box.className = 'extra';
+
+  for (const vara of rad.meal_plan_items ?? []) {
+    const post = document.createElement('span');
+    post.className = 'extravara';
+
+    const text = document.createElement('span');
+    text.textContent = formatItem(vara);
+
+    const bort = document.createElement('button');
+    bort.type = 'button';
+    bort.className = 'linkbutton';
+    bort.textContent = '×';
+    bort.title = `Ta bort ${formatItem(vara)}`;
+    bort.setAttribute('aria-label', `Ta bort ${formatItem(vara)}`);
+    bort.addEventListener('click', guard(() => taBortExtra(vara.id)));
+
+    post.append(text, bort);
+    box.append(post);
+  }
+
+  const form = document.createElement('form');
+  form.className = 'extraform';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 80;
+  input.autocomplete = 'off';
+  input.placeholder = 't.ex. 1 pkt bacon';
+  input.setAttribute('aria-label', `Vara som hör till ${titel}`);
+
+  const knapp = document.createElement('button');
+  knapp.type = 'submit';
+  knapp.className = 'linkbutton';
+  knapp.textContent = 'Lägg till vara';
+
+  form.append(input, knapp);
+  form.addEventListener('submit', guard((event) => {
+    event.preventDefault();
+    return läggTillExtra(rad.id, input.value);
+  }));
+
+  box.append(form);
+  return box;
 }
 
 async function planeraIn() {
@@ -212,6 +269,38 @@ async function planeraIn() {
 async function taBort(id) {
   setStatus('Tar bort …');
   await client.rest(`meal_plan?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { prefer: 'return=minimal' },
+  });
+  await ladda();
+}
+
+/**
+ * Texten tolkas med receptens egen parser, så "2 pkt bacon" blir mängd, enhet
+ * och vara och kan slås ihop med samma vara ur ett annat recept. Ett fält per
+ * del hade varit tre rutor att fylla i för något man skriver på en sekund.
+ */
+async function läggTillExtra(planId, text) {
+  const tolkad = parseIngredient(text);
+  if (!tolkad.name) {
+    setStatus('Skriv minst ett varunamn.', 'warn');
+    return;
+  }
+
+  setStatus('Lägger till …');
+  await client.insert('meal_plan_items', {
+    meal_plan_id: planId,
+    name: tolkad.name,
+    unit: tolkad.unit,
+    quantity: tolkad.quantity,
+  }, { returning: 'minimal' });
+
+  await ladda();
+}
+
+async function taBortExtra(id) {
+  setStatus('Tar bort …');
+  await client.rest(`meal_plan_items?id=eq.${id}`, {
     method: 'DELETE',
     headers: { prefer: 'return=minimal' },
   });

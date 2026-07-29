@@ -210,6 +210,57 @@ test('en rad ur enbart planen är inte manuell', () => {
   assert.equal(rad(lista, 'mjölk').manuellt, false);
 });
 
+test('rättens extravaror räknas som dess ingredienser', () => {
+  // Sylten till pannkakorna hör till middagen men inte till receptet. Den ska
+  // stå i listan med rätten som källa, precis som mjölken.
+  const lista = buildShoppingList([{
+    ...rätt('Pannkakor', null, [['mjölk', 6, 'dl']]),
+    extra: [{ name: 'sylt', quantity: 1, unit: 'burk' }],
+  }]);
+
+  assert.equal(lista.length, 2);
+  assert.deepEqual(rad(lista, 'sylt').recipes, ['Pannkakor'], 'källan är rätten');
+  assert.equal(rad(lista, 'sylt').manuellt, false, 'den kommer ur planen, inte ur listan');
+});
+
+test('extravaror slås ihop med samma vara ur ett recept', () => {
+  const lista = buildShoppingList([
+    { ...rätt('Pannkakor', null, [['smör', 1, 'msk']]), extra: [{ name: 'smör', quantity: 2, unit: 'msk' }] },
+  ]);
+
+  assert.equal(lista.length, 1);
+  assert.equal(rad(lista, 'smör').quantity, 3);
+});
+
+test('extravaror skalas inte med portionerna', () => {
+  // Två paket bacon är två paket bacon även när man lagar dubbelt. Receptets
+  // faktor säger ingenting om vad någon skrivit dit för hand.
+  const lista = buildShoppingList([{
+    ...rätt('Pannkakor', 4, [['mjölk', 6, 'dl']], 8),
+    extra: [{ name: 'bacon', quantity: 2, unit: 'pkt' }],
+  }]);
+
+  assert.equal(rad(lista, 'mjölk').quantity, 12, 'receptets mängd fördubblas');
+  assert.equal(rad(lista, 'bacon').quantity, 2, 'extravaran står som den skrevs');
+  assert.equal(rad(lista, 'bacon').approximate, false, 'ingen skalning, ingen flagga');
+});
+
+test('en bortplockad extravara hoppas över som planens övriga', () => {
+  const lista = buildShoppingList(
+    [{ ...rätt('Pannkakor', null, [['mjölk', 6, 'dl']]), extra: [{ name: 'sylt', quantity: 1, unit: 'burk' }] }],
+    [],
+    new Set([groupKey('sylt', 'burk')]),
+  );
+
+  assert.equal(lista.length, 1);
+  assert.equal(rad(lista, 'sylt'), undefined);
+});
+
+test('en post utan extravaror fungerar som förut', () => {
+  const lista = buildShoppingList([rätt('A', null, [['mjölk', 6, 'dl']])]);
+  assert.equal(lista.length, 1);
+});
+
 test('raden skrivs som man läser den i butiken', () => {
   assert.equal(formatItem({ name: 'grädde', quantity: 2.5, unit: 'dl' }), '2,5 dl grädde');
   assert.equal(formatItem({ name: 'ägg', quantity: 3, unit: 'st' }), '3 st ägg');
