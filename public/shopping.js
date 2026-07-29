@@ -1,46 +1,26 @@
 // Slår ihop veckans recept till en inköpslista.
 //
-// Svårare än tolkningen, och av ett skäl som är värt att skriva ut: 2 dl och
-// 1 dl går att addera, men 2 dl grädde och 1 paket grädde gör det inte. Ett
-// paket är inte ett mått. Regeln är därför att bara addera när enheterna är
-// identiska eller går att räkna om exakt – resten blir egna rader.
+// Regeln är kort: bara identiska enheter adderas. 2 dl och 1 dl blir 3 dl, men
+// 1 msk och 1 krm blir två rader, och 2 dl grädde och 1 paket grädde likaså.
 //
-// Hellre två rader grädde än en felaktig summa. En summa som ser rimlig ut men
-// är fel upptäcker man i butiken, och då är det för sent.
-
-/**
- * Enheter som mäter samma sak och går att räkna om exakt. Nyckeln är basenhet
- * per familj: milliliter respektive gram.
- *
- * Svenska mått är definierade i milliliter – krm är 1, tsk 5, msk 15 – så
- * omräkningen är exakt och inte en uppskattning.
- */
-const VOLYM = { ml: 1, krm: 1, tsk: 5, msk: 15, cl: 10, dl: 100, l: 1000 };
-const VIKT = { g: 1, hg: 100, kg: 1000 };
-
-// Vad summan skrivs i. Största enheten där talet blir minst 1, så att 2500 ml
-// blir 2,5 l och inte 2500 ml.
-const VOLYMSTEGE = [['l', 1000], ['dl', 100], ['msk', 15], ['tsk', 5], ['ml', 1]];
-const VIKTSTEGE = [['kg', 1000], ['g', 1]];
-
-function familj(unit) {
-  if (unit && VOLYM[unit] !== undefined) return { bas: VOLYM[unit], stege: VOLYMSTEGE, namn: 'volym' };
-  if (unit && VIKT[unit] !== undefined) return { bas: VIKT[unit], stege: VIKTSTEGE, namn: 'vikt' };
-  // st, förp, burk, klyfta, cup, lb … går bara ihop med exakt sig själva.
-  return null;
-}
+// Listan räknade förr om inom volym och vikt och skrev summan i den enhet där
+// talet blev störst möjligt utan att bli mindre än 1. Det gav "1,33 msk" av
+// fyra teskedar och "16 krm" av en matsked plus ett kryddmått – tal som är
+// exakt rätt och ändå obrukbara. Det finns ingen anledning att byta enhet: den
+// som skrev receptet valde måttet, och två rader läser sig bättre än en
+// omräkning ingen bad om.
+//
+// Hellre två rader grädde än en summa man inte kan handla efter.
 
 /**
  * Nyckeln avgör vad som får slås ihop. Samma nyckel, samma rad.
  *
- * Exporterad för att anroparen ska kunna peka ut en rad utan att gissa hur
- * grupperingen fungerar – "2 dl grädde" och "2 msk grädde" hamnar i samma
- * grupp, och en nyckel byggd på råa enheter hade missat det.
+ * Namn och enhet, båda exakt – "2 dl grädde" och "2 msk grädde" är två rader,
+ * och därmed två saker att bocka av var för sig. Exporterad för att anroparen
+ * ska kunna peka ut en rad utan att gissa hur grupperingen fungerar.
  */
 export function groupKey(name, unit) {
-  const vara = normalizeName(name);
-  const grupp = familj(unit)?.namn ?? `=${unit ?? ''}`;
-  return `${vara}|${grupp}`;
+  return `${normalizeName(name)}|${unit ?? ''}`;
 }
 
 /** "Vispgrädde" och "vispgrädde " är samma vara. Mer än så gissar vi inte. */
@@ -65,8 +45,7 @@ export function buildShoppingList(poster, egna = [], dolda = new Set()) {
     const grupp = hämtaGrupp(grupper, rad.name, rad.unit);
     grupp.manuellt = true;
     if (rad.quantity !== null && rad.quantity !== undefined) {
-      const f = familj(rad.unit);
-      grupp.summa = (grupp.summa ?? 0) + rad.quantity * (f ? f.bas : 1);
+      grupp.summa = (grupp.summa ?? 0) + rad.quantity;
     }
   }
 
@@ -92,9 +71,7 @@ export function buildShoppingList(poster, egna = [], dolda = new Set()) {
       grupp.recipes.add(recipe.title);
 
       if (rad.quantity !== null && rad.quantity !== undefined) {
-        const f = familj(rad.unit);
-        const bidrag = rad.quantity * faktor * (f ? f.bas : 1);
-        grupp.summa = (grupp.summa ?? 0) + bidrag;
+        grupp.summa = (grupp.summa ?? 0) + rad.quantity * faktor;
         if (faktor !== 1) grupp.approximate = true;
       }
     }
@@ -138,11 +115,9 @@ function skrivUt(grupp) {
   // Rader utan mängd behåller sin brist. "Salt" står kvar som "salt".
   if (grupp.summa === null) return { ...gemensamt, quantity: null, unit: grupp.unit };
 
-  const f = familj(grupp.unit);
-  if (!f) return { ...gemensamt, quantity: round(grupp.summa), unit: grupp.unit };
-
-  const [unit, storlek] = f.stege.find(([, s]) => grupp.summa >= s) ?? f.stege.at(-1);
-  return { ...gemensamt, quantity: round(grupp.summa / storlek), unit };
+  // Enheten är den raderna kom i. Alla i gruppen har samma – det är vad
+  // gruppen betyder.
+  return { ...gemensamt, quantity: round(grupp.summa), unit: grupp.unit };
 }
 
 /** Två decimaler räcker. Ingen mäter upp 1,333 dl. */
@@ -216,15 +191,15 @@ export async function applyToList(client, householdId, { remove, write, markers 
 /**
  * Bock- och bortplocksmärkena, slagna ihop per vara.
  *
- * Nyckeln är gruppnyckeln och inte enheten rakt av. Listan skriver summan i den
- * enhet som blir läsligast, så raden man bockade av som "2 dl mjölk" kan stå
- * som "1,2 l mjölk" när veckan ser annorlunda ut – och bocken hör till varan,
- * inte till hur mängden råkade skrivas den dagen.
+ * Nyckeln är gruppnyckeln, alltså namn och enhet. Ett märke per rad man ser:
+ * "2 dl grädde" och "1 msk grädde" är två rader i listan och bockas av var för
+ * sig, för de kommer ur olika recept och köps sällan i samma ögonblick.
  *
- * Flera märken på samma vara slås ihop i stället för att det sist lästa får
- * gälla. Så länge det gick att skriva två rader för samma vara hann sådana par
- * uppstå, och de ligger kvar i tabellen. Ett märke som ibland syns och ibland
- * inte är värre än ett som står kvar en omgång för länge.
+ * Flera märken på samma rad slås ihop i stället för att det sist lästa får
+ * gälla. Så länge listan skrev om enheter kunde ett märke bli kvar i en enhet
+ * raden slutat använda, och sådana par ligger kvar i tabellen. Ett märke som
+ * ibland syns och ibland inte är värre än ett som står kvar en omgång för
+ * länge.
  *
  * @param {Array<{name, unit, source, checked, hidden}>} sparade tabellens rader
  * @returns {Map<string, {checked: boolean, hidden: boolean}>}

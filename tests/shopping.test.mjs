@@ -29,17 +29,20 @@ test('samma vara och samma enhet adderas', () => {
   assert.equal(rad(lista, 'mjölk').unit, 'dl');
 });
 
-test('mått som går att räkna om exakt slås ihop', () => {
-  // Svenska mått är definierade i milliliter: msk är 15, tsk 5, krm 1.
-  // Omräkningen är exakt, inte en uppskattning.
+test('olika mått slås inte ihop, inte ens de som går att räkna om', () => {
+  // 2 dl och 2 msk går att räkna om exakt, och listan gjorde det förut: 2,3 dl.
+  // Men det finns ingen anledning att byta enhet. Den som skrev receptet valde
+  // måttet, och 1 msk plus 1 krm hade blivit "16 krm" av samma räkning.
   const lista = buildShoppingList([
     rätt('A', null, [['grädde', 2, 'dl']]),
     rätt('B', null, [['grädde', 2, 'msk']]),
   ]);
 
-  assert.equal(lista.length, 1);
-  assert.equal(rad(lista, 'grädde').quantity, 2.3, '200 ml + 30 ml');
-  assert.equal(rad(lista, 'grädde').unit, 'dl');
+  assert.equal(lista.length, 2);
+  assert.deepEqual(
+    lista.map((post) => [post.quantity, post.unit]).sort(),
+    [[2, 'dl'], [2, 'msk']],
+  );
 });
 
 test('paket är inte ett mått och slås inte ihop med deciliter', () => {
@@ -62,15 +65,23 @@ test('vikt och volym blandas aldrig', () => {
   assert.equal(lista.length, 2);
 });
 
-test('summan skrivs i den enhet man handlar i', () => {
+test('summan skrivs i den enhet recepten använde', () => {
+  // Listan skrev förut om till den största enhet där talet blev minst 1. Fyra
+  // teskedar blev "1,33 msk" – exakt rätt och ändå obrukbart.
   const stor = buildShoppingList([rätt('A', null, [['mjölk', 15, 'dl']])]);
-  assert.deepEqual([rad(stor, 'mjölk').quantity, rad(stor, 'mjölk').unit], [1.5, 'l']);
+  assert.deepEqual([rad(stor, 'mjölk').quantity, rad(stor, 'mjölk').unit], [15, 'dl']);
 
   const tung = buildShoppingList([rätt('A', null, [['potatis', 1500, 'g']])]);
-  assert.deepEqual([rad(tung, 'potatis').quantity, rad(tung, 'potatis').unit], [1.5, 'kg']);
+  assert.deepEqual([rad(tung, 'potatis').quantity, rad(tung, 'potatis').unit], [1500, 'g']);
 
-  const liten = buildShoppingList([rätt('A', null, [['salt', 2, 'krm']])]);
-  assert.deepEqual([rad(liten, 'salt').quantity, rad(liten, 'salt').unit], [2, 'ml']);
+  const liten = buildShoppingList([
+    rätt('A', null, [['salt', 2, 'tsk']]),
+    rätt('B', null, [['salt', 2, 'tsk']]),
+  ]);
+  assert.deepEqual([rad(liten, 'salt').quantity, rad(liten, 'salt').unit], [4, 'tsk']);
+
+  const krydda = buildShoppingList([rätt('A', null, [['kanel', 2, 'krm']])]);
+  assert.deepEqual([rad(krydda, 'kanel').quantity, rad(krydda, 'kanel').unit], [2, 'krm']);
 });
 
 test('portioner skalar mängderna och flaggar raden', () => {
@@ -78,10 +89,9 @@ test('portioner skalar mängderna och flaggar raden', () => {
   // Mängden skalas ändå, men det ska synas att den är ungefärlig.
   const lista = buildShoppingList([rätt('Pannkakor', 4, [['mjölk', 6, 'dl']], 8)]);
 
-  // 6 dl för 4 portioner blir 12 dl för 8 – och skrivs som 1,2 l, för det är
-  // så mjölk står på hyllan.
-  assert.equal(rad(lista, 'mjölk').quantity, 1.2);
-  assert.equal(rad(lista, 'mjölk').unit, 'l');
+  // 6 dl för 4 portioner blir 12 dl för 8. Receptet sa dl, alltså står det dl.
+  assert.equal(rad(lista, 'mjölk').quantity, 12);
+  assert.equal(rad(lista, 'mjölk').unit, 'dl');
   assert.equal(rad(lista, 'mjölk').approximate, true);
 });
 
@@ -174,14 +184,17 @@ test('handtillagt slås ihop med planens', () => {
   assert.deepEqual(rad(lista, 'mjölk').recipes, ['Pannkakor']);
 });
 
-test('handtillagt räknas om precis som planens mått', () => {
+test('handtillagt i en annan enhet blir en egen rad, som planens', () => {
+  // Samma regel oavsett varifrån raden kom. Skriver man in 2 msk grädde när
+  // planen vill ha 2 dl står båda kvar – ingen av dem skrivs om till den andra.
   const lista = buildShoppingList(
     [rätt('A', null, [['grädde', 2, 'dl']])],
     [{ name: 'grädde', quantity: 2, unit: 'msk' }],
   );
 
-  assert.equal(lista.length, 1);
-  assert.equal(rad(lista, 'grädde').quantity, 2.3, '200 ml + 30 ml');
+  assert.equal(lista.length, 2);
+  assert.equal(lista.find((post) => post.unit === 'msk').manuellt, true);
+  assert.equal(lista.find((post) => post.unit === 'dl').manuellt, false);
 });
 
 test('handtillagt utan motsvarighet i planen blir en egen rad', () => {
@@ -265,16 +278,16 @@ test('handlat som kommer ur veckoplanen plockas bort i stället för att avbocka
   assert.deepEqual(markers, [bortplock('mjölk', 'dl')], 'planens del är fullgjord');
 });
 
-test('det handlade känns igen även när listan skrivit om enheten', () => {
-  // Listan skriver summan så den går att läsa i butiken, så bocken för 500 ml
-  // mjölk står som "0,5 l mjölk". En jämförelse på råa enheter hade missat det.
+test('en rad i en annan enhet är en annan rad och rörs inte', () => {
+  // Halvlitern står kvar som sin egen rad med sin egen bock. Listan skriver
+  // inte om enheter, så det finns ingenting att känna igen på tvären.
   const { remove, write } = addToList(
     [{ name: 'mjölk', quantity: 500, unit: 'ml' }],
     [sparad('a', 'mjölk', 0.5, 'l'), bock('b', 'mjölk', 'l')],
   );
 
   assert.deepEqual(write, [vara('mjölk', 500, 'ml')]);
-  assert.deepEqual(remove.sort(), ['a', 'b'], 'den gamla halvlitern räknas inte med');
+  assert.deepEqual(remove, [], 'den avbockade halvlitern är en annan vara i listan');
 });
 
 test('bortplocksmärket står kvar när varan läggs i igen', () => {
@@ -357,14 +370,12 @@ test('namnlösa rader faller bort', () => {
   assert.deepEqual(addToList(null).write, []);
 });
 
-test('bocken hör till varan och inte till enheten summan skrevs i', () => {
-  // Bockad som "2 dl mjölk", men veckan ändras och raden står som "1,2 l".
-  // Letade man på enheten rakt av var bocken borta.
+test('bocken hör till raden man ser: namn och enhet', () => {
   const märken = collectMarkers([sparad('b', 'mjölk', 2, 'dl', { source: 'plan', checked: true })]);
 
-  assert.equal(märken.get(groupKey('mjölk', 'l')).checked, true);
-  assert.equal(märken.get(groupKey('Mjölk ', 'ml')).checked, true, 'och inte till skiftläget');
-  assert.equal(märken.get(groupKey('mjölk', 'förp')), undefined, 'paket är inte ett mått');
+  assert.equal(märken.get(groupKey('Mjölk ', 'dl')).checked, true, 'skiftläge och blanksteg gissas bort');
+  assert.equal(märken.get(groupKey('mjölk', 'l')), undefined, 'en literrad bockas av för sig');
+  assert.equal(märken.get(groupKey('mjölk', 'förp')), undefined);
 });
 
 test('två märken på samma vara slås ihop', () => {
