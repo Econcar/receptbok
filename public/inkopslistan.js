@@ -16,8 +16,7 @@ import {
 } from '/shopping.js';
 import { parseIngredient } from '/ingredients.js';
 import { groupByCategory, KATEGORIER } from '/categories.js';
-
-const DAGAR = 7;
+import { veckansFönster } from '/vecka.js';
 
 const els = {
   gate: document.getElementById('gate'),
@@ -45,6 +44,10 @@ let plan = [];
 let sparade = [];
 let varor = [];
 let senasteHämtning = 0;
+
+/** Det render() senast satte på skärmen. Rensaknapparna räknar på det. */
+let visade = [];
+let inhandlade = [];
 
 registerServiceWorker();
 showVersion();
@@ -93,20 +96,10 @@ async function start() {
   await ladda();
 }
 
-/** ISO-datum i lokal tid. toISOString() hade gett gårdagens datum på kvällen. */
-function isoDatum(d) {
-  const år = d.getFullYear();
-  const månad = String(d.getMonth() + 1).padStart(2, '0');
-  const dag = String(d.getDate()).padStart(2, '0');
-  return `${år}-${månad}-${dag}`;
-}
-
 async function ladda() {
   setStatus('Hämtar listan …');
 
-  const idag = new Date();
-  const sista = new Date(idag);
-  sista.setDate(idag.getDate() + DAGAR - 1);
+  const { från, till } = veckansFönster();
 
   [recipes, plan, sparade, varor] = await Promise.all([
     client.rest('recipes?select=id,title,servings,'
@@ -114,7 +107,7 @@ async function ladda() {
       + `&household_id=eq.${household.id}`),
     client.rest('meal_plan?select=id,date,servings,recipe_id'
       + `&household_id=eq.${household.id}`
-      + `&date=gte.${isoDatum(idag)}&date=lte.${isoDatum(sista)}`),
+      + `&date=gte.${från}&date=lte.${till}`),
     client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`),
     client.rest(`ingredients?select=name,category&household_id=eq.${household.id}`),
   ]);
@@ -155,6 +148,13 @@ function render() {
 
   const attHandla = synliga.filter((post) => !märke(post)?.checked);
   const inhandlat = synliga.filter((post) => märke(post)?.checked);
+
+  // Rensaknapparna talar om hur mycket de tar. De ska räkna det som står på
+  // skärmen och inte raderna i tabellen: ett märke kan höra till en vara som
+  // inte längre visas, och "Rensa 5 varor" över en lista med tre är inget man
+  // kan svara ja på.
+  visade = synliga;
+  inhandlade = inhandlat;
 
   const kategoriFör = (post) => {
     const namn = normalizeName(post.name);
@@ -477,15 +477,16 @@ async function läggTillEgen() {
  * det. Att rensa listan ska inte tyst ändra vad man tänkt laga.
  */
 async function rensaInhandlat() {
-  const bockade = sparade.filter((rad) => rad.source === 'plan' && rad.checked);
-  if (!bockade.length) {
+  if (!inhandlade.length) {
     setStatus('Inget är inhandlat än.', 'warn');
     return;
   }
 
-  if (!confirm(`Rensa ${bockade.length} inhandlade varor? Veckoplanen rörs inte.`)) return;
+  const antal = inhandlade.length === 1 ? '1 inhandlad vara' : `${inhandlade.length} inhandlade varor`;
+  if (!confirm(`Rensa ${antal}? Veckoplanen rörs inte.`)) return;
 
   setStatus('Rensar …');
+  const bockade = sparade.filter((rad) => rad.source === 'plan' && rad.checked);
   const nycklar = new Set(bockade.map((rad) => groupKey(rad.name, rad.unit)));
 
   await client.rest(
@@ -526,7 +527,14 @@ async function återställDolda() {
  */
 async function rensaAllt() {
   if (!sparade.length) {
-    setStatus('Listan är redan tom.', 'warn');
+    // Knappen når bara det som ligger i tabellen. Står listan full av varor
+    // som räknas fram ur veckoplanen finns det ingenting här att radera – och
+    // att då säga "listan är redan tom" till någon som ser tolv rader är att
+    // ljuga om varför ingenting händer.
+    setStatus(visade.length
+      ? 'Det finns inget att rensa – allt i listan kommer ur veckoplanen. '
+        + 'Plocka bort rader en och en, eller ta bort rätter ur veckan.'
+      : 'Listan är redan tom.', 'warn');
     return;
   }
 

@@ -199,11 +199,19 @@ export function collectMarkers(sparade) {
  * bara ske där skrivningen faktiskt träffar den gamla raden – räknar man ihop
  * mängder som sedan hamnar på två olika rader har man dubblat dem.
  *
+ * Det handlade går inte alltid att radera. Kommer mängden ur veckoplanen räknas
+ * den fram på nytt vid varje visning, och en bock som bara tas bort betyder att
+ * varan blir ohandlad igen. Därför byts den mot ett bortplock: planens bidrag
+ * är fullgjort, och det som ska handlas är det man just lade i. Det kräver att
+ * anroparen säger vilka varor planen faktiskt bidrar med – att gissa på det
+ * hade tyst räknat bort en vara som en annan rätt i veckan också behöver.
+ *
  * @param {Array<{name, quantity, unit}>} nya raderna man vill lägga i
- * @param {Array<{id, name, unit, quantity, source, checked}>} sparade tabellens rader
- * @returns {{remove: string[], write: Array<{name, unit, quantity}>}}
+ * @param {Array<{id, name, unit, quantity, source, checked, hidden}>} sparade tabellens rader
+ * @param {Set<string>} planensVaror gruppnycklar veckoplanen bidrar med just nu
+ * @returns {{remove: string[], write: Array<object>, markers: Array<object>}}
  */
-export function addToList(nya, sparade = []) {
+export function addToList(nya, sparade = [], planensVaror = new Set()) {
   const rader = slåIhopValda(nya);
   const berörda = new Set(rader.map((rad) => groupKey(rad.name, rad.unit)));
 
@@ -223,10 +231,13 @@ export function addToList(nya, sparade = []) {
     const nyckel = groupKey(rad.name, rad.unit);
     if (!berörda.has(nyckel)) continue;
 
-    // Bocken och bortplocket gällde förra omgången. Lägger man i varan igen
-    // ska den stå bland det som ska handlas, varken avbockad eller undanstoppad.
-    if (rad.source === 'plan') remove.push(rad.id);
-    else if (handlat.has(nyckel)) remove.push(rad.id);
+    // Bortplocket står kvar. Det säger att planens mängd inte ska räknas, och
+    // det gäller fortfarande – annars kom det man plockat bort tillbaka
+    // bakvägen, med den nya raden ovanpå. Att raden ändå syns beror på att
+    // bortplock bara gäller planens bidrag, aldrig det man lagt till själv.
+    if (rad.source === 'plan') {
+      if (handlat.has(nyckel)) remove.push(rad.id);
+    } else if (handlat.has(nyckel)) remove.push(rad.id);
     else if (skrivnyckel(rad)) gamla.set(skrivnyckel(rad), rad);
   }
 
@@ -234,9 +245,24 @@ export function addToList(nya, sparade = []) {
     name: rad.name,
     unit: rad.unit,
     quantity: summera(gamla.get(skrivnyckel(rad))?.quantity, rad.quantity),
+    source: 'manual',
   }));
 
-  return { remove, write };
+  const markers = rader
+    .filter((rad) => {
+      const nyckel = groupKey(rad.name, rad.unit);
+      return handlat.has(nyckel) && planensVaror.has(nyckel);
+    })
+    .map((rad) => ({
+      name: rad.name,
+      unit: rad.unit,
+      quantity: null,
+      checked: false,
+      hidden: true,
+      source: 'plan',
+    }));
+
+  return { remove, write, markers };
 }
 
 /**

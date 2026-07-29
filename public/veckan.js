@@ -11,8 +11,7 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
   startSession,
 } from '/session.js';
-
-const DAGAR = 7;
+import { dagarna, isoDatum } from '/vecka.js';
 
 const els = {
   gate: document.getElementById('gate'),
@@ -85,23 +84,6 @@ async function start() {
 }
 
 // --- Datum ------------------------------------------------------------------
-
-/** ISO-datum i lokal tid. toISOString() hade gett gårdagens datum på kvällen. */
-function isoDatum(d) {
-  const år = d.getFullYear();
-  const månad = String(d.getMonth() + 1).padStart(2, '0');
-  const dag = String(d.getDate()).padStart(2, '0');
-  return `${år}-${månad}-${dag}`;
-}
-
-function dagarna() {
-  const idag = new Date();
-  return Array.from({ length: DAGAR }, (_, i) => {
-    const d = new Date(idag);
-    d.setDate(idag.getDate() + i);
-    return d;
-  });
-}
 
 const namnPåDag = (d, index) => {
   if (index === 0) return 'I dag';

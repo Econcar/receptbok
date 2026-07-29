@@ -215,6 +215,17 @@ const sparad = (id, name, quantity, unit, extra = {}) => ({
 
 const bock = (id, name, unit) => sparad(id, name, null, unit, { source: 'plan', checked: true });
 
+/** Raden addToList vill skriva för en vara. */
+const vara = (name, quantity, unit) => ({ name, unit, quantity, source: 'manual' });
+
+/** Det bortplock som ersätter en bock på något veckoplanen bidrar med. */
+const bortplock = (name, unit) => ({
+  name, unit, quantity: null, checked: false, hidden: true, source: 'plan',
+});
+
+/** Gruppnycklarna veckoplanen bidrar med, som anroparen räknar fram dem. */
+const iPlanen = (...poster) => new Set(poster.map(([name, unit]) => groupKey(name, unit)));
+
 test('en påfyllning summeras med det som redan står i listan', () => {
   const { remove, write } = addToList(
     [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
@@ -222,19 +233,35 @@ test('en påfyllning summeras med det som redan står i listan', () => {
   );
 
   assert.deepEqual(remove, [], 'den gamla raden skrivs över, inte bort');
-  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 5 }]);
+  assert.deepEqual(write, [vara('mjölk', 5, 'dl')]);
 });
 
 test('det som redan är handlat börjar om från noll', () => {
   // Buggen som fanns: bocken betyder att mjölken står i kylen. Att lägga i
   // receptet igen skulle be om två deciliter till, inte om fyra.
-  const { remove, write } = addToList(
+  const { remove, write, markers } = addToList(
     [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
     [sparad('a', 'mjölk', 2, 'dl'), bock('b', 'mjölk', 'dl')],
   );
 
-  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 2 }]);
+  assert.deepEqual(write, [vara('mjölk', 2, 'dl')]);
   assert.deepEqual(remove.sort(), ['a', 'b'], 'både den handlade raden och bocken');
+  assert.deepEqual(markers, [], 'planen bidrar inte, så det finns inget att plocka bort');
+});
+
+test('handlat som kommer ur veckoplanen plockas bort i stället för att avbockas', () => {
+  // Planens mängd går inte att radera – den räknas fram på nytt vid varje
+  // visning. Att bara ta bort bocken gjorde varan ohandlad igen, och den nya
+  // raden lades ovanpå: fyra deciliter att handla när man behövde två.
+  const { remove, write, markers } = addToList(
+    [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
+    [bock('b', 'mjölk', 'dl')],
+    iPlanen(['mjölk', 'dl']),
+  );
+
+  assert.deepEqual(remove, ['b'], 'bocken gäller förra omgången');
+  assert.deepEqual(write, [vara('mjölk', 2, 'dl')]);
+  assert.deepEqual(markers, [bortplock('mjölk', 'dl')], 'planens del är fullgjord');
 });
 
 test('det handlade känns igen även när listan skrivit om enheten', () => {
@@ -245,19 +272,23 @@ test('det handlade känns igen även när listan skrivit om enheten', () => {
     [sparad('a', 'mjölk', 0.5, 'l'), bock('b', 'mjölk', 'l')],
   );
 
-  assert.deepEqual(write, [{ name: 'mjölk', unit: 'ml', quantity: 500 }]);
+  assert.deepEqual(write, [vara('mjölk', 500, 'ml')]);
   assert.deepEqual(remove.sort(), ['a', 'b'], 'den gamla halvlitern räknas inte med');
 });
 
-test('bortplocksmärket tas bort när varan läggs i igen', () => {
-  // Att lägga något i listan betyder att man vill handla det. Låg märket kvar
-  // syntes varan inte alls.
-  const { remove } = addToList(
+test('bortplocksmärket står kvar när varan läggs i igen', () => {
+  // Plockar man bort en rad har man sagt att planens mängd inte ska räknas.
+  // Tas märket bort kommer den tillbaka bakvägen, med den nya raden ovanpå.
+  // Raden syns ändå: bortplock gäller bara planens bidrag, aldrig det egna.
+  const { remove, write, markers } = addToList(
     [{ name: 'salt', quantity: 1, unit: 'krm' }],
     [sparad('b', 'salt', null, 'krm', { source: 'plan', hidden: true })],
+    iPlanen(['salt', 'krm']),
   );
 
-  assert.deepEqual(remove, ['b']);
+  assert.deepEqual(remove, []);
+  assert.deepEqual(markers, [], 'märket finns redan och behöver inte skrivas om');
+  assert.deepEqual(write, [vara('salt', 1, 'krm')]);
 });
 
 test('en vara utan enhet summeras inte i förväg', () => {
@@ -270,7 +301,7 @@ test('en vara utan enhet summeras inte i förväg', () => {
   );
 
   assert.deepEqual(remove, []);
-  assert.deepEqual(write, [{ name: 'ägg', unit: null, quantity: 3 }]);
+  assert.deepEqual(write, [vara('ägg', 3, null)]);
 
   // Och listan lägger ihop de två raderna till sex ägg, som sig bör.
   const lista = buildShoppingList([], [sparad('a', 'ägg', 3, null), sparad('b', 'ägg', 3, null)]);
@@ -285,7 +316,7 @@ test('skiftläge summeras inte i förväg heller', () => {
     [sparad('a', 'Mjölk', 2, 'dl')],
   );
 
-  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 2 }]);
+  assert.deepEqual(write, [vara('mjölk', 2, 'dl')]);
 });
 
 test('samma vara två gånger i ett recept blir en rad', () => {
@@ -296,7 +327,7 @@ test('samma vara två gånger i ett recept blir en rad', () => {
     { name: 'smör', quantity: 2, unit: 'msk' },
   ], []);
 
-  assert.deepEqual(write, [{ name: 'smör', unit: 'msk', quantity: 3 }]);
+  assert.deepEqual(write, [vara('smör', 3, 'msk')]);
 });
 
 test('rader utan mängd behåller sin brist genom påfyllningen', () => {
@@ -305,17 +336,19 @@ test('rader utan mängd behåller sin brist genom påfyllningen', () => {
     [sparad('a', 'salt', null, null)],
   );
 
-  assert.deepEqual(write, [{ name: 'salt', unit: null, quantity: null }], 'inte 0');
+  assert.deepEqual(write, [vara('salt', null, null)], 'inte 0');
 });
 
 test('andra varors rader och märken lämnas i fred', () => {
-  const { remove, write } = addToList(
+  const { remove, write, markers } = addToList(
     [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
     [sparad('a', 'kaffe', null, null), bock('b', 'kaffe', null)],
+    iPlanen(['kaffe', null]),
   );
 
   assert.deepEqual(remove, []);
-  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 2 }]);
+  assert.deepEqual(markers, []);
+  assert.deepEqual(write, [vara('mjölk', 2, 'dl')]);
 });
 
 test('namnlösa rader faller bort', () => {

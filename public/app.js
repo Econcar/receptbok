@@ -14,7 +14,8 @@ import {
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
 import { scaleFactor, scaleIngredient, scaleQuantity } from '/scale.js';
-import { addToList } from '/shopping.js';
+import { addToList, buildShoppingList, groupKey } from '/shopping.js';
+import { veckansFönster } from '/vecka.js';
 import { normalizeTag, valbara } from '/tags.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
@@ -565,12 +566,15 @@ async function läggIInköpslista(ingredienser, faktor) {
 
   setStatus('Lägger i inköpslistan …');
 
-  const sparade = await client.rest(
-    'shopping_list_items?select=id,name,unit,quantity,source,checked'
-    + `&household_id=eq.${household.id}`,
-  );
+  const { från, till } = veckansFönster();
+  const [sparade, planerat] = await Promise.all([
+    client.rest('shopping_list_items?select=id,name,unit,quantity,source,checked,hidden'
+      + `&household_id=eq.${household.id}`),
+    client.rest('meal_plan?select=recipe_id,servings'
+      + `&household_id=eq.${household.id}&date=gte.${från}&date=lte.${till}`),
+  ]);
 
-  const { remove, write } = addToList(rader, sparade);
+  const { remove, write, markers } = addToList(rader, sparade, planensVaror(planerat));
 
   // Ordningen är inte fri: det gamla måste bort före det nya. Tvärtom hade
   // raderingen tagit den rad skrivningen just uppdaterat, och varan försvunnit
@@ -584,12 +588,29 @@ async function läggIInköpslista(ingredienser, faktor) {
 
   await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
     method: 'POST',
-    body: write.map((rad) => ({ household_id: household.id, source: 'manual', ...rad })),
+    body: [...write, ...markers].map((rad) => ({ household_id: household.id, ...rad })),
     headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
   });
 
   const antal = write.length === 1 ? '1 vara' : `${write.length} varor`;
   setStatus(`${antal} lagda i inköpslistan.`, 'ok');
+}
+
+/**
+ * Gruppnycklarna veckoplanen bidrar med just nu.
+ *
+ * Behövs för att veta om en avbockad vara går att radera eller bara går att
+ * plocka bort. Recepten ligger redan i minnet med sina ingredienser, så det är
+ * bara planens rader som behöver hämtas – och sammanslagningen är densamma som
+ * inköpslistan gör, för annars hade de två svarat olika på samma fråga.
+ */
+function planensVaror(planerat) {
+  const poster = planerat.map((rad) => ({
+    recipe: recipes.find((recept) => recept.id === rad.recipe_id),
+    servings: rad.servings,
+  }));
+
+  return new Set(buildShoppingList(poster).map((post) => groupKey(post.name, post.unit)));
 }
 
 /**
