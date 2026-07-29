@@ -155,3 +155,132 @@ export function formatItem(item) {
     : `${String(item.quantity).replace('.', ',')}${item.unit ? ` ${item.unit}` : ''} `;
   return `${mängd}${item.name}`.trim();
 }
+
+/**
+ * Bock- och bortplocksmärkena, slagna ihop per vara.
+ *
+ * Nyckeln är gruppnyckeln och inte enheten rakt av. Listan skriver summan i den
+ * enhet som blir läsligast, så raden man bockade av som "2 dl mjölk" kan stå
+ * som "1,2 l mjölk" när veckan ser annorlunda ut – och bocken hör till varan,
+ * inte till hur mängden råkade skrivas den dagen.
+ *
+ * Flera märken på samma vara slås ihop i stället för att det sist lästa får
+ * gälla. Så länge det gick att skriva två rader för samma vara hann sådana par
+ * uppstå, och de ligger kvar i tabellen. Ett märke som ibland syns och ibland
+ * inte är värre än ett som står kvar en omgång för länge.
+ *
+ * @param {Array<{name, unit, source, checked, hidden}>} sparade tabellens rader
+ * @returns {Map<string, {checked: boolean, hidden: boolean}>}
+ */
+export function collectMarkers(sparade) {
+  const märken = new Map();
+
+  for (const rad of sparade ?? []) {
+    if (rad?.source !== 'plan') continue;
+
+    const nyckel = groupKey(rad.name, rad.unit);
+    const förra = märken.get(nyckel);
+    märken.set(nyckel, {
+      checked: Boolean(rad.checked) || Boolean(förra?.checked),
+      hidden: Boolean(rad.hidden) || Boolean(förra?.hidden),
+    });
+  }
+
+  return märken;
+}
+
+/**
+ * Vad som ska skrivas när man lägger varor i listan för hand.
+ *
+ * Svårare än ett insert, av tre skäl. Det handtillagda ligger som en rad per
+ * vara och enhet, så en påfyllning måste summeras ihop med det som redan står
+ * där. Det som är avbockat är redan handlat och hemburet, och då börjar en ny
+ * omgång om från noll i stället för att lägga sig ovanpå. Och summeringen får
+ * bara ske där skrivningen faktiskt träffar den gamla raden – räknar man ihop
+ * mängder som sedan hamnar på två olika rader har man dubblat dem.
+ *
+ * @param {Array<{name, quantity, unit}>} nya raderna man vill lägga i
+ * @param {Array<{id, name, unit, quantity, source, checked}>} sparade tabellens rader
+ * @returns {{remove: string[], write: Array<{name, unit, quantity}>}}
+ */
+export function addToList(nya, sparade = []) {
+  const rader = slåIhopValda(nya);
+  const berörda = new Set(rader.map((rad) => groupKey(rad.name, rad.unit)));
+
+  // Avbockat betyder handlat. Att summera ovanpå det hade skickat en tillbaka
+  // till butiken efter samma två deciliter mjölk en gång till.
+  const handlat = new Set(
+    (sparade ?? [])
+      .filter((rad) => rad.source === 'plan' && rad.checked)
+      .map((rad) => groupKey(rad.name, rad.unit))
+      .filter((nyckel) => berörda.has(nyckel)),
+  );
+
+  const remove = [];
+  const gamla = new Map();
+
+  for (const rad of sparade ?? []) {
+    const nyckel = groupKey(rad.name, rad.unit);
+    if (!berörda.has(nyckel)) continue;
+
+    // Bocken och bortplocket gällde förra omgången. Lägger man i varan igen
+    // ska den stå bland det som ska handlas, varken avbockad eller undanstoppad.
+    if (rad.source === 'plan') remove.push(rad.id);
+    else if (handlat.has(nyckel)) remove.push(rad.id);
+    else if (skrivnyckel(rad)) gamla.set(skrivnyckel(rad), rad);
+  }
+
+  const write = rader.map((rad) => ({
+    name: rad.name,
+    unit: rad.unit,
+    quantity: summera(gamla.get(skrivnyckel(rad))?.quantity, rad.quantity),
+  }));
+
+  return { remove, write };
+}
+
+/**
+ * Nyckeln som skrivningen krockar på: namn och enhet, precis som tabellens
+ * unika villkor.
+ *
+ * Namnet jämförs tecken för tecken – databasen bryr sig om skiftläget även om
+ * listan inte gör det – och en rad utan enhet får ingen nyckel alls. Postgres
+ * räknar två okända enheter som olika värden, så en sådan rad krockar aldrig
+ * med något: den blir en rad till i tabellen, och listan summerar ihop dem ändå.
+ */
+const skrivnyckel = (rad) => (rad.unit === null || rad.unit === undefined
+  ? null
+  : `${rad.name}|${rad.unit}`);
+
+/**
+ * Slår ihop dubbletter inom det man just valt.
+ *
+ * Ett recept tar mycket väl smör två gånger, en gång till såsen och en gång
+ * till stekningen. Två rader med samma nyckel i samma skrivning får Postgres
+ * att vägra hela anropet, och då hade ingenting alls hamnat i listan.
+ */
+function slåIhopValda(nya) {
+  const summor = new Map();
+
+  for (const rad of nya ?? []) {
+    const name = String(rad?.name ?? '').trim();
+    if (!name) continue;
+
+    const unit = rad.unit ?? null;
+    const nyckel = `${name}|${unit ?? ''}`;
+    const gammal = summor.get(nyckel);
+    if (gammal) gammal.quantity = summera(gammal.quantity, rad.quantity);
+    else summor.set(nyckel, { name, unit, quantity: rad.quantity ?? null });
+  }
+
+  return [...summor.values()];
+}
+
+/** null plus null är null. "Salt" utan mängd blir inte 0 av att läggas i igen. */
+function summera(a, b) {
+  const tomt = (v) => v === null || v === undefined;
+  if (tomt(a) && tomt(b)) return null;
+  // Tre decimaler, samma noggrannhet som portionsskalningen. Utan avrundningen
+  // blir 0,1 + 0,2 något med sexton decimaler, och det står i listan.
+  return Math.round((Number(a ?? 0) + Number(b ?? 0)) * 1000) / 1000;
+}

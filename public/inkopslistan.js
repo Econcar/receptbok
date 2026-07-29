@@ -11,7 +11,9 @@ import {
   configured, describe, guard, loadHousehold, registerServiceWorker, setStatus, showVersion,
   startSession,
 } from '/session.js';
-import { buildShoppingList, formatItem, groupKey, normalizeName } from '/shopping.js';
+import {
+  buildShoppingList, collectMarkers, formatItem, groupKey, normalizeName,
+} from '/shopping.js';
 import { parseIngredient } from '/ingredients.js';
 import { groupByCategory, KATEGORIER } from '/categories.js';
 
@@ -124,29 +126,20 @@ async function ladda() {
 
 const receptet = (id) => recipes.find((r) => r.id === id);
 
-/**
- * Nyckeln som binder en uträknad rad till sin bock.
- *
- * Bocken är alltid en egen rad med source='plan', även för något man lagt till
- * själv. Ett enda bockningssätt för allt som visas – annars hade en rad som
- * består av både planerat och handtillagt haft två ställen att vara avbockad på.
- */
-const bockNyckel = (name, unit) => `${normalizeName(name)}|${unit ?? ''}`;
-
 const egnaRader = () => sparade.filter((rad) => rad.source === 'manual');
 
 function render() {
-  const märken = new Map(
-    sparade.filter((rad) => rad.source === 'plan')
-      .map((rad) => [bockNyckel(rad.name, rad.unit), rad]),
-  );
+  // Bocken är alltid en egen rad med source='plan', även för något man lagt
+  // till själv. Ett enda bockningssätt för allt som visas – annars hade en rad
+  // som består av både planerat och handtillagt haft två ställen att vara
+  // avbockad på.
+  const märken = collectMarkers(sparade);
 
   // Bortplockat gäller planens bidrag. En handtillagd rad med samma nyckel står
   // kvar – det är så en ändrad rad ersätter den uträknade i stället för att
   // adderas till den.
   const dolda = new Set(
-    sparade.filter((rad) => rad.source === 'plan' && rad.hidden)
-      .map((rad) => groupKey(rad.name, rad.unit)),
+    [...märken].filter(([, märke]) => märke.hidden).map(([nyckel]) => nyckel),
   );
 
   const synliga = buildShoppingList(
@@ -155,7 +148,7 @@ function render() {
     dolda,
   );
 
-  const märke = (post) => märken.get(bockNyckel(post.name, post.unit));
+  const märke = (post) => märken.get(groupKey(post.name, post.unit));
   const kvarDolda = [...dolda].filter(
     (k) => !synliga.some((post) => groupKey(post.name, post.unit) === k),
   ).length;
@@ -373,27 +366,34 @@ async function sättKategori(namn, category) {
 /**
  * Skriver bock- och bortplocksmärket för en rad.
  *
- * Båda bor på samma rad med source='plan', keyad på namn och enhet – samma
- * nyckel som sammanslagningen använder. Är varken bocken eller bortplocket
- * satt tas raden bort helt, så tabellen inte fylls av tomma märken.
+ * Båda bor på samma rad med source='plan', och det ska finnas exakt en sådan
+ * rad per vara. Därför går de gamla bort innan den nya skrivs, i stället för
+ * att skrivas över: tabellens unika villkor räknar två okända enheter som
+ * olika värden, så en vara utan enhet krockade aldrig med sig själv och fick
+ * ett märke till för varje klick. Samma svep städar bort märken som står kvar
+ * i en enhet listan slutat skriva summan i.
+ *
+ * Är varken bocken eller bortplocket satt skrivs ingen ny rad alls, så
+ * tabellen inte fylls av tomma märken.
  */
 async function sättMärke(post, ändring) {
-  const nyckel = bockNyckel(post.name, post.unit);
-  const nuvarande = sparade.find(
-    (rad) => rad.source === 'plan' && bockNyckel(rad.name, rad.unit) === nyckel,
+  const nyckel = groupKey(post.name, post.unit);
+  const gamla = sparade.filter(
+    (rad) => rad.source === 'plan' && groupKey(rad.name, rad.unit) === nyckel,
   );
 
+  const nuvarande = collectMarkers(gamla).get(nyckel);
   const checked = ändring.checked ?? nuvarande?.checked ?? false;
   const hidden = ändring.hidden ?? nuvarande?.hidden ?? false;
 
-  if (!checked && !hidden) {
-    await client.rest(
-      `shopping_list_items?household_id=eq.${household.id}&source=eq.plan`
-      + `&name=eq.${encodeURIComponent(post.name)}`
-      + (post.unit ? `&unit=eq.${encodeURIComponent(post.unit)}` : '&unit=is.null'),
-      { method: 'DELETE', headers: { prefer: 'return=minimal' } },
-    );
-  } else {
+  if (gamla.length) {
+    await client.rest(`shopping_list_items?id=in.(${gamla.map((rad) => rad.id).join(',')})`, {
+      method: 'DELETE',
+      headers: { prefer: 'return=minimal' },
+    });
+  }
+
+  if (checked || hidden) {
     await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
       method: 'POST',
       body: {
@@ -486,7 +486,7 @@ async function rensaInhandlat() {
   if (!confirm(`Rensa ${bockade.length} inhandlade varor? Veckoplanen rörs inte.`)) return;
 
   setStatus('Rensar …');
-  const nycklar = new Set(bockade.map((rad) => bockNyckel(rad.name, rad.unit)));
+  const nycklar = new Set(bockade.map((rad) => groupKey(rad.name, rad.unit)));
 
   await client.rest(
     `shopping_list_items?household_id=eq.${household.id}&source=eq.plan&checked=is.true`,
@@ -494,7 +494,7 @@ async function rensaInhandlat() {
   );
 
   for (const egen of egnaRader()) {
-    if (!nycklar.has(bockNyckel(egen.name, egen.unit))) continue;
+    if (!nycklar.has(groupKey(egen.name, egen.unit))) continue;
     await client.rest(`shopping_list_items?id=eq.${egen.id}`, {
       method: 'DELETE', headers: { prefer: 'return=minimal' },
     });

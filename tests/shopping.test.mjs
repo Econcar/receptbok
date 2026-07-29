@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildShoppingList, formatItem, normalizeName } from '../public/shopping.js';
+import {
+  addToList, buildShoppingList, collectMarkers, formatItem, groupKey, normalizeName,
+} from '../public/shopping.js';
 
 /** Kortform för ett recept i veckoplanen. */
 const rätt = (title, servings, ingredienser, planerade = null) => ({
@@ -204,4 +206,147 @@ test('namnnormaliseringen gissar inte', () => {
   assert.equal(normalizeName('  Vispgrädde '), 'vispgrädde');
   assert.equal(normalizeName('gul  lök'), 'gul lök');
   assert.equal(normalizeName(null), '');
+});
+
+/** Kortform för en rad i tabellen. */
+const sparad = (id, name, quantity, unit, extra = {}) => ({
+  id, name, quantity, unit, source: 'manual', checked: false, hidden: false, ...extra,
+});
+
+const bock = (id, name, unit) => sparad(id, name, null, unit, { source: 'plan', checked: true });
+
+test('en påfyllning summeras med det som redan står i listan', () => {
+  const { remove, write } = addToList(
+    [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
+    [sparad('a', 'mjölk', 3, 'dl')],
+  );
+
+  assert.deepEqual(remove, [], 'den gamla raden skrivs över, inte bort');
+  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 5 }]);
+});
+
+test('det som redan är handlat börjar om från noll', () => {
+  // Buggen som fanns: bocken betyder att mjölken står i kylen. Att lägga i
+  // receptet igen skulle be om två deciliter till, inte om fyra.
+  const { remove, write } = addToList(
+    [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
+    [sparad('a', 'mjölk', 2, 'dl'), bock('b', 'mjölk', 'dl')],
+  );
+
+  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 2 }]);
+  assert.deepEqual(remove.sort(), ['a', 'b'], 'både den handlade raden och bocken');
+});
+
+test('det handlade känns igen även när listan skrivit om enheten', () => {
+  // Listan skriver summan så den går att läsa i butiken, så bocken för 500 ml
+  // mjölk står som "0,5 l mjölk". En jämförelse på råa enheter hade missat det.
+  const { remove, write } = addToList(
+    [{ name: 'mjölk', quantity: 500, unit: 'ml' }],
+    [sparad('a', 'mjölk', 0.5, 'l'), bock('b', 'mjölk', 'l')],
+  );
+
+  assert.deepEqual(write, [{ name: 'mjölk', unit: 'ml', quantity: 500 }]);
+  assert.deepEqual(remove.sort(), ['a', 'b'], 'den gamla halvlitern räknas inte med');
+});
+
+test('bortplocksmärket tas bort när varan läggs i igen', () => {
+  // Att lägga något i listan betyder att man vill handla det. Låg märket kvar
+  // syntes varan inte alls.
+  const { remove } = addToList(
+    [{ name: 'salt', quantity: 1, unit: 'krm' }],
+    [sparad('b', 'salt', null, 'krm', { source: 'plan', hidden: true })],
+  );
+
+  assert.deepEqual(remove, ['b']);
+});
+
+test('en vara utan enhet summeras inte i förväg', () => {
+  // Tabellens unika villkor tar inte två okända enheter för samma värde, så
+  // skrivningen krockar aldrig med den gamla raden utan blir en rad till.
+  // Summerade vi här hade de tre äggen räknats två gånger.
+  const { remove, write } = addToList(
+    [{ name: 'ägg', quantity: 3, unit: null }],
+    [sparad('a', 'ägg', 3, null)],
+  );
+
+  assert.deepEqual(remove, []);
+  assert.deepEqual(write, [{ name: 'ägg', unit: null, quantity: 3 }]);
+
+  // Och listan lägger ihop de två raderna till sex ägg, som sig bör.
+  const lista = buildShoppingList([], [sparad('a', 'ägg', 3, null), sparad('b', 'ägg', 3, null)]);
+  assert.equal(rad(lista, 'ägg').quantity, 6);
+});
+
+test('skiftläge summeras inte i förväg heller', () => {
+  // Databasen jämför namn tecken för tecken. "Mjölk" och "mjölk" blir två
+  // rader där, och listan lägger ihop dem när den visas.
+  const { write } = addToList(
+    [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
+    [sparad('a', 'Mjölk', 2, 'dl')],
+  );
+
+  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 2 }]);
+});
+
+test('samma vara två gånger i ett recept blir en rad', () => {
+  // Smör till såsen och smör till stekningen. Två rader med samma nyckel i
+  // samma skrivning får databasen att vägra hela anropet.
+  const { write } = addToList([
+    { name: 'smör', quantity: 1, unit: 'msk' },
+    { name: 'smör', quantity: 2, unit: 'msk' },
+  ], []);
+
+  assert.deepEqual(write, [{ name: 'smör', unit: 'msk', quantity: 3 }]);
+});
+
+test('rader utan mängd behåller sin brist genom påfyllningen', () => {
+  const { write } = addToList(
+    [{ name: 'salt', quantity: null, unit: null }],
+    [sparad('a', 'salt', null, null)],
+  );
+
+  assert.deepEqual(write, [{ name: 'salt', unit: null, quantity: null }], 'inte 0');
+});
+
+test('andra varors rader och märken lämnas i fred', () => {
+  const { remove, write } = addToList(
+    [{ name: 'mjölk', quantity: 2, unit: 'dl' }],
+    [sparad('a', 'kaffe', null, null), bock('b', 'kaffe', null)],
+  );
+
+  assert.deepEqual(remove, []);
+  assert.deepEqual(write, [{ name: 'mjölk', unit: 'dl', quantity: 2 }]);
+});
+
+test('namnlösa rader faller bort', () => {
+  assert.deepEqual(addToList([{ name: '  ', quantity: 2, unit: 'dl' }], []).write, []);
+  assert.deepEqual(addToList(null).write, []);
+});
+
+test('bocken hör till varan och inte till enheten summan skrevs i', () => {
+  // Bockad som "2 dl mjölk", men veckan ändras och raden står som "1,2 l".
+  // Letade man på enheten rakt av var bocken borta.
+  const märken = collectMarkers([sparad('b', 'mjölk', 2, 'dl', { source: 'plan', checked: true })]);
+
+  assert.equal(märken.get(groupKey('mjölk', 'l')).checked, true);
+  assert.equal(märken.get(groupKey('Mjölk ', 'ml')).checked, true, 'och inte till skiftläget');
+  assert.equal(märken.get(groupKey('mjölk', 'förp')), undefined, 'paket är inte ett mått');
+});
+
+test('två märken på samma vara slås ihop', () => {
+  // Så länge det gick att skriva två rader för samma vara hann sådana par
+  // uppstå. Ett märke som ibland syns och ibland inte är värre än ett som
+  // står kvar en omgång för länge.
+  const märken = collectMarkers([
+    sparad('a', 'salt', null, null, { source: 'plan', checked: true }),
+    sparad('b', 'salt', null, null, { source: 'plan', hidden: true }),
+  ]);
+
+  assert.equal(märken.size, 1);
+  assert.deepEqual(märken.get(groupKey('salt', null)), { checked: true, hidden: true });
+});
+
+test('handtillagda rader är inga märken', () => {
+  assert.equal(collectMarkers([sparad('a', 'kaffe', null, null)]).size, 0);
+  assert.equal(collectMarkers(null).size, 0);
 });

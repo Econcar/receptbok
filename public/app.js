@@ -14,7 +14,7 @@ import {
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
 import { scaleFactor, scaleIngredient, scaleQuantity } from '/scale.js';
-import { groupKey } from '/shopping.js';
+import { addToList } from '/shopping.js';
 import { normalizeTag, valbara } from '/tags.js';
 import {
   loadHousehold as cachedHousehold, loadRecipes as cachedRecipes,
@@ -546,8 +546,8 @@ function stjärna(recipe) {
  * det sex portioner man handlar till. Rader utan mängd – "salt efter smak" –
  * följer med utan mängd, för de ska ändå stå på listan om man saknar salt.
  *
- * Finns varan redan som handtillagd summeras mängden i stället för att skrivas
- * över. "Lägg till" ska lägga till.
+ * Vad som ska summeras och vad som ska börja om avgörs av addToList. Här görs
+ * bara skrivningarna.
  */
 async function läggIInköpslista(ingredienser, faktor) {
   const rader = ingredienser
@@ -565,62 +565,31 @@ async function läggIInköpslista(ingredienser, faktor) {
 
   setStatus('Lägger i inköpslistan …');
 
-  const befintliga = await client.rest(
-    `shopping_list_items?select=name,unit,quantity&household_id=eq.${household.id}&source=eq.manual`,
-  );
-  const nyckel = (r) => `${r.name.toLowerCase()}|${r.unit ?? ''}`;
-  const fanns = new Map(befintliga.map((r) => [nyckel(r), r]));
-
-  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
-    method: 'POST',
-    body: rader.map((rad) => {
-      const gammal = fanns.get(nyckel(rad));
-      const summa = rad.quantity === null && gammal?.quantity == null
-        ? null
-        : Number(gammal?.quantity ?? 0) + Number(rad.quantity ?? 0);
-      return {
-        household_id: household.id,
-        name: rad.name,
-        unit: rad.unit,
-        quantity: summa,
-        source: 'manual',
-      };
-    }),
-    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
-  });
-
-  await nollställMärken(rader);
-
-  const antal = rader.length === 1 ? '1 vara' : `${rader.length} varor`;
-  setStatus(`${antal} lagda i inköpslistan.`, 'ok');
-}
-
-/**
- * Tar bort bock- och bortplocksmärken för de varor som just lagts i listan.
- *
- * Utan det hamnar en vara man handlade förra veckan direkt under "Redan
- * inhandlat", och en man plockat bort syns inte alls – märkena ligger kvar och
- * gäller fel omgång. Att lägga något i listan betyder att man vill handla det,
- * och då ska det stå bland det som ska handlas.
- *
- * Jämförelsen går på gruppnyckeln och inte på enheten rakt av: listan skriver
- * summan i den enhet som blir läsligast, så märket för 500 ml mjölk kan mycket
- * väl stå som "0,5 l mjölk".
- */
-async function nollställMärken(rader) {
-  const nycklar = new Set(rader.map((rad) => groupKey(rad.name, rad.unit)));
-
-  const märken = await client.rest(
-    `shopping_list_items?select=id,name,unit&household_id=eq.${household.id}&source=eq.plan`,
+  const sparade = await client.rest(
+    'shopping_list_items?select=id,name,unit,quantity,source,checked'
+    + `&household_id=eq.${household.id}`,
   );
 
-  for (const märke of märken) {
-    if (!nycklar.has(groupKey(märke.name, märke.unit))) continue;
-    await client.rest(`shopping_list_items?id=eq.${märke.id}`, {
+  const { remove, write } = addToList(rader, sparade);
+
+  // Ordningen är inte fri: det gamla måste bort före det nya. Tvärtom hade
+  // raderingen tagit den rad skrivningen just uppdaterat, och varan försvunnit
+  // ur listan i stället för att stå där med sin nya mängd.
+  if (remove.length) {
+    await client.rest(`shopping_list_items?id=in.(${remove.join(',')})`, {
       method: 'DELETE',
       headers: { prefer: 'return=minimal' },
     });
   }
+
+  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
+    method: 'POST',
+    body: write.map((rad) => ({ household_id: household.id, source: 'manual', ...rad })),
+    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+  });
+
+  const antal = write.length === 1 ? '1 vara' : `${write.length} varor`;
+  setStatus(`${antal} lagda i inköpslistan.`, 'ok');
 }
 
 /**
