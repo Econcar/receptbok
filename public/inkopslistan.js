@@ -46,8 +46,8 @@ let sparade = [];
 let varor = [];
 let senasteHämtning = 0;
 
-/** Det render() senast satte på skärmen. Rensaknapparna räknar på det. */
-let visade = [];
+/** Det render() senast satte på skärmen. Knapparna längst ned arbetar på det. */
+let kvarAttHandla = [];
 let inhandlade = [];
 
 registerServiceWorker();
@@ -92,7 +92,7 @@ async function start() {
 
   els.clearChecked.addEventListener('click', guard(() => rensaInhandlat()));
   els.restoreHidden.addEventListener('click', guard(() => återställDolda()));
-  els.clearAll.addEventListener('click', guard(() => rensaAllt()));
+  els.clearAll.addEventListener('click', guard(() => bockaAvAllt()));
 
   await ladda();
 }
@@ -152,11 +152,10 @@ function render() {
   const attHandla = synliga.filter((post) => !märke(post)?.checked);
   const inhandlat = synliga.filter((post) => märke(post)?.checked);
 
-  // Rensaknapparna talar om hur mycket de tar. De ska räkna det som står på
-  // skärmen och inte raderna i tabellen: ett märke kan höra till en vara som
-  // inte längre visas, och "Rensa 5 varor" över en lista med tre är inget man
-  // kan svara ja på.
-  visade = synliga;
+  // Knapparna längst ned arbetar på det som står på skärmen, inte på raderna i
+  // tabellen: ett märke kan höra till en vara som inte längre visas, och
+  // "Rensa 5 varor" över en lista med tre är inget man kan svara ja på.
+  kvarAttHandla = attHandla;
   inhandlade = inhandlat;
 
   const kategoriFör = (post) => {
@@ -544,37 +543,58 @@ async function återställDolda() {
 }
 
 /**
- * Rensar hela listan: alla handtillagda rader, alla bockar och alla
- * bortplock. Veckoplanen rörs inte – står rätterna kvar fylls listan på nytt
- * nästa gång sidan öppnas, vilket är meningen.
+ * Bockar av allt som står kvar att handla.
+ *
+ * Knappen raderade förut hela tabellen. Att komma hem från butiken och behöva
+ * kryssa i tjugo rutor en och en var det den skulle bespara en, men den gjorde
+ * det genom att kasta bort listan – och då gick det inte längre att se vad man
+ * handlat, eller ångra en rad man missat.
+ *
+ * Nu flyttas raderna till "Redan inhandlat" i stället. Ingenting försvinner:
+ * en rad man ändå inte fick tag på kryssas ur igen, och "Rensa inhandlat"
+ * städar när man är klar.
  */
-async function rensaAllt() {
-  if (!sparade.length) {
-    // Knappen når bara det som ligger i tabellen. Står listan full av varor
-    // som räknas fram ur veckoplanen finns det ingenting här att radera – och
-    // att då säga "listan är redan tom" till någon som ser tolv rader är att
-    // ljuga om varför ingenting händer.
-    setStatus(visade.length
-      ? 'Det finns inget att rensa – allt i listan kommer ur veckoplanen. '
-        + 'Plocka bort rader en och en, eller ta bort rätter ur veckan.'
-      : 'Listan är redan tom.', 'warn');
+async function bockaAvAllt() {
+  if (!kvarAttHandla.length) {
+    setStatus('Det finns ingenting kvar att handla.', 'warn');
     return;
   }
 
-  const svar = confirm([
-    'Rensa hela inköpslistan?',
-    '',
-    'Allt du lagt till själv försvinner, liksom bockar och bortplock. '
-    + 'Veckoplanen rörs inte, så listan fylls på nytt av de rätter som står kvar.',
-  ].join('\n'));
-  if (!svar) return;
+  const antal = kvarAttHandla.length === 1 ? '1 vara' : `${kvarAttHandla.length} varor`;
+  if (!confirm(`Flytta ${antal} till Redan inhandlat?`)) return;
 
-  setStatus('Rensar …');
-  await client.rest(`shopping_list_items?household_id=eq.${household.id}`, {
-    method: 'DELETE',
-    headers: { prefer: 'return=minimal' },
+  setStatus('Bockar av …');
+
+  // Ett märke per rad. De gamla går bort först, av samma skäl som i sättMärke:
+  // en rad utan enhet krockar aldrig med sig själv och hade fått ett märke till.
+  const märken = collectMarkers(sparade);
+  const nycklar = new Set(kvarAttHandla.map((post) => groupKey(post.name, post.unit)));
+  const gamla = sparade.filter(
+    (rad) => rad.source === 'plan' && nycklar.has(groupKey(rad.name, rad.unit)),
+  );
+
+  if (gamla.length) {
+    await client.rest(`shopping_list_items?id=in.(${gamla.map((rad) => rad.id).join(',')})`, {
+      method: 'DELETE', headers: { prefer: 'return=minimal' },
+    });
+  }
+
+  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
+    method: 'POST',
+    body: kvarAttHandla.map((post) => ({
+      household_id: household.id,
+      name: post.name,
+      unit: post.unit,
+      quantity: post.quantity,
+      checked: true,
+      // Bortplocket följer med. Raden syns tack vare sitt handtillagda bidrag,
+      // och planens del ska fortsätta vara borträknad.
+      hidden: Boolean(märken.get(groupKey(post.name, post.unit))?.hidden),
+      source: 'plan',
+    })),
+    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
   });
 
   await ladda();
-  setStatus('Inköpslistan är rensad.', 'ok');
+  setStatus(`${antal} flyttade till Redan inhandlat.`, 'ok');
 }
