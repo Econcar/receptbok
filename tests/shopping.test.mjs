@@ -417,14 +417,27 @@ test('skrivningen raderar det gamla innan den skriver det nya', async () => {
 
   assert.deepEqual(client.anrop.map((a) => a.method), ['DELETE', 'POST'], 'ett svep var, i den ordningen');
   assert.match(client.anrop[0].path, /id=in\.\(a,b\)/);
-  assert.deepEqual(
-    client.anrop[1].body,
-    [
-      { household_id: 'h1', ...vara('mjölk', 2, 'dl') },
-      { household_id: 'h1', ...bortplock('mjölk', 'dl') },
-    ],
-    'varan och märket i samma skrivning',
-  );
+
+  assert.deepEqual(client.anrop[1].body, [
+    { household_id: 'h1', name: 'mjölk', unit: 'dl', quantity: 2, checked: false, hidden: false, source: 'manual' },
+    { household_id: 'h1', name: 'mjölk', unit: 'dl', quantity: null, checked: false, hidden: true, source: 'plan' },
+  ], 'varan och märket i samma skrivning');
+});
+
+test('alla rader i en skrivning har samma fält', async () => {
+  // PostgREST skriver flera rader som en enda insert och svarar 400 "All object
+  // keys must match" om objekten inte ser likadana ut. Varan bär inga märkesfält
+  // av sig själv, så de måste fyllas i här.
+  const client = loggandeKlient();
+
+  await applyToList(client, 'h1', {
+    remove: [],
+    write: [vara('mjölk', 2, 'dl'), vara('salt', null, null)],
+    markers: [bortplock('mjölk', 'dl')],
+  });
+
+  const nycklar = client.anrop[0].body.map((rad) => Object.keys(rad).sort().join(','));
+  assert.equal(new Set(nycklar).size, 1, nycklar.join(' ≠ '));
 });
 
 test('inget att skriva ger inga anrop', async () => {

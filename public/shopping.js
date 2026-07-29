@@ -181,6 +181,11 @@ export function planGroups(poster) {
  * raderingen tagit den rad skrivningen just uppdaterat, och varan försvunnit ur
  * listan i stället för att stå där med sin nya mängd. Därför bor den här och
  * inte hos varje knapp som lägger något i listan.
+ *
+ * Varje rad skrivs med samma fält, även de som bara gäller märken. PostgREST
+ * skriver flera rader som en enda insert och vägrar med "All object keys must
+ * match" om objekten inte ser likadana ut – och en vara och ett bortplock i
+ * samma skrivning gjorde inte det.
  */
 export async function applyToList(client, householdId, { remove, write, markers }) {
   if (remove.length) {
@@ -195,7 +200,15 @@ export async function applyToList(client, householdId, { remove, write, markers 
 
   await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
     method: 'POST',
-    body: rader.map((rad) => ({ household_id: householdId, ...rad })),
+    body: rader.map((rad) => ({
+      household_id: householdId,
+      name: rad.name,
+      unit: rad.unit,
+      quantity: rad.quantity,
+      checked: rad.checked ?? false,
+      hidden: rad.hidden ?? false,
+      source: rad.source,
+    })),
     headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
   });
 }
