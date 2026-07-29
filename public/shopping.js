@@ -157,6 +157,50 @@ export function formatItem(item) {
 }
 
 /**
+ * Gruppnycklarna veckoplanen bidrar med just nu.
+ *
+ * Skiljer det som går att radera från det som bara går att plocka bort. En
+ * mängd som räknas fram ur planen kommer tillbaka nästa gång listan visas, hur
+ * många rader man än raderar – det enda sättet att säga att den är handlad är
+ * att plocka bort den.
+ *
+ * Samma sammanslagning som listan själv gör. Räknade de två olika hade de
+ * svarat olika på samma fråga.
+ *
+ * @param {Array<{recipe: object, servings: number|null}>} poster veckans rätter
+ * @returns {Set<string>}
+ */
+export function planGroups(poster) {
+  return new Set(buildShoppingList(poster).map((post) => groupKey(post.name, post.unit)));
+}
+
+/**
+ * Skriver det addToList räknat fram.
+ *
+ * Ordningen är inte fri: det gamla måste bort före det nya. Tvärtom hade
+ * raderingen tagit den rad skrivningen just uppdaterat, och varan försvunnit ur
+ * listan i stället för att stå där med sin nya mängd. Därför bor den här och
+ * inte hos varje knapp som lägger något i listan.
+ */
+export async function applyToList(client, householdId, { remove, write, markers }) {
+  if (remove.length) {
+    await client.rest(`shopping_list_items?id=in.(${remove.join(',')})`, {
+      method: 'DELETE',
+      headers: { prefer: 'return=minimal' },
+    });
+  }
+
+  const rader = [...write, ...markers];
+  if (!rader.length) return;
+
+  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
+    method: 'POST',
+    body: rader.map((rad) => ({ household_id: householdId, ...rad })),
+    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
+  });
+}
+
+/**
  * Bock- och bortplocksmärkena, slagna ihop per vara.
  *
  * Nyckeln är gruppnyckeln och inte enheten rakt av. Listan skriver summan i den

@@ -14,7 +14,7 @@ import {
 import { matchesQuery } from '/search.js';
 import { parseIngredient } from '/ingredients.js';
 import { scaleFactor, scaleIngredient, scaleQuantity } from '/scale.js';
-import { addToList, buildShoppingList, groupKey } from '/shopping.js';
+import { addToList, applyToList, planGroups } from '/shopping.js';
 import { veckansFönster } from '/vecka.js';
 import { normalizeTag, valbara } from '/tags.js';
 import {
@@ -574,43 +574,17 @@ async function läggIInköpslista(ingredienser, faktor) {
       + `&household_id=eq.${household.id}&date=gte.${från}&date=lte.${till}`),
   ]);
 
-  const { remove, write, markers } = addToList(rader, sparade, planensVaror(planerat));
-
-  // Ordningen är inte fri: det gamla måste bort före det nya. Tvärtom hade
-  // raderingen tagit den rad skrivningen just uppdaterat, och varan försvunnit
-  // ur listan i stället för att stå där med sin nya mängd.
-  if (remove.length) {
-    await client.rest(`shopping_list_items?id=in.(${remove.join(',')})`, {
-      method: 'DELETE',
-      headers: { prefer: 'return=minimal' },
-    });
-  }
-
-  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
-    method: 'POST',
-    body: [...write, ...markers].map((rad) => ({ household_id: household.id, ...rad })),
-    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
-  });
-
-  const antal = write.length === 1 ? '1 vara' : `${write.length} varor`;
-  setStatus(`${antal} lagda i inköpslistan.`, 'ok');
-}
-
-/**
- * Gruppnycklarna veckoplanen bidrar med just nu.
- *
- * Behövs för att veta om en avbockad vara går att radera eller bara går att
- * plocka bort. Recepten ligger redan i minnet med sina ingredienser, så det är
- * bara planens rader som behöver hämtas – och sammanslagningen är densamma som
- * inköpslistan gör, för annars hade de två svarat olika på samma fråga.
- */
-function planensVaror(planerat) {
-  const poster = planerat.map((rad) => ({
+  // Recepten ligger redan i minnet med sina ingredienser, så det är bara
+  // planens rader som behöver hämtas för att veta vad veckan redan bidrar med.
+  const resultat = addToList(rader, sparade, planGroups(planerat.map((rad) => ({
     recipe: recipes.find((recept) => recept.id === rad.recipe_id),
     servings: rad.servings,
-  }));
+  }))));
 
-  return new Set(buildShoppingList(poster).map((post) => groupKey(post.name, post.unit)));
+  await applyToList(client, household.id, resultat);
+
+  const antal = resultat.write.length === 1 ? '1 vara' : `${resultat.write.length} varor`;
+  setStatus(`${antal} lagda i inköpslistan.`, 'ok');
 }
 
 /**

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  addToList, buildShoppingList, collectMarkers, formatItem, groupKey, normalizeName,
+  addToList, applyToList, buildShoppingList, collectMarkers, formatItem, groupKey,
+  normalizeName, planGroups,
 } from '../public/shopping.js';
 
 /** Kortform för ett recept i veckoplanen. */
@@ -382,4 +383,52 @@ test('två märken på samma vara slås ihop', () => {
 test('handtillagda rader är inga märken', () => {
   assert.equal(collectMarkers([sparad('a', 'kaffe', null, null)]).size, 0);
   assert.equal(collectMarkers(null).size, 0);
+});
+
+test('planens varor är gruppnycklar och inte namn', () => {
+  // Samma nycklar som märkena och sammanslagningen använder, annars svarar de
+  // två olika på frågan om planen bidrar med varan.
+  const nycklar = planGroups([rätt('Pannkakor', null, [['mjölk', 15, 'dl'], ['salt', null, null]])]);
+
+  assert.equal(nycklar.has(groupKey('mjölk', 'dl')), true, 'summan står som 1,5 l, varan är densamma');
+  assert.equal(nycklar.has(groupKey('salt', null)), true);
+  assert.equal(nycklar.has(groupKey('smör', 'g')), false);
+  assert.equal(planGroups([]).size, 0);
+});
+
+/** Klient som bara skriver upp vad den blev ombedd att göra. */
+function loggandeKlient() {
+  const anrop = [];
+  return {
+    anrop,
+    rest: async (path, { method = 'GET', body } = {}) => { anrop.push({ method, path, body }); },
+  };
+}
+
+test('skrivningen raderar det gamla innan den skriver det nya', async () => {
+  // Tvärtom hade raderingen tagit den rad skrivningen just uppdaterat.
+  const client = loggandeKlient();
+
+  await applyToList(client, 'h1', {
+    remove: ['a', 'b'],
+    write: [vara('mjölk', 2, 'dl')],
+    markers: [bortplock('mjölk', 'dl')],
+  });
+
+  assert.deepEqual(client.anrop.map((a) => a.method), ['DELETE', 'POST'], 'ett svep var, i den ordningen');
+  assert.match(client.anrop[0].path, /id=in\.\(a,b\)/);
+  assert.deepEqual(
+    client.anrop[1].body,
+    [
+      { household_id: 'h1', ...vara('mjölk', 2, 'dl') },
+      { household_id: 'h1', ...bortplock('mjölk', 'dl') },
+    ],
+    'varan och märket i samma skrivning',
+  );
+});
+
+test('inget att skriva ger inga anrop', async () => {
+  const client = loggandeKlient();
+  await applyToList(client, 'h1', { remove: [], write: [], markers: [] });
+  assert.deepEqual(client.anrop, []);
 });

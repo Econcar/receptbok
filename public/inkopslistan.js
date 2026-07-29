@@ -12,7 +12,8 @@ import {
   startSession,
 } from '/session.js';
 import {
-  buildShoppingList, collectMarkers, formatItem, groupKey, normalizeName,
+  addToList, applyToList, buildShoppingList, collectMarkers, formatItem, groupKey,
+  normalizeName, planGroups,
 } from '/shopping.js';
 import { parseIngredient } from '/ingredients.js';
 import { groupByCategory, KATEGORIER } from '/categories.js';
@@ -121,6 +122,12 @@ const receptet = (id) => recipes.find((r) => r.id === id);
 
 const egnaRader = () => sparade.filter((rad) => rad.source === 'manual');
 
+/** Veckans rätter som sammanslagningen vill ha dem. */
+const planposter = () => plan.map((rad) => ({
+  recipe: receptet(rad.recipe_id),
+  servings: rad.servings,
+}));
+
 function render() {
   // Bocken är alltid en egen rad med source='plan', även för något man lagt
   // till själv. Ett enda bockningssätt för allt som visas – annars hade en rad
@@ -135,11 +142,7 @@ function render() {
     [...märken].filter(([, märke]) => märke.hidden).map(([nyckel]) => nyckel),
   );
 
-  const synliga = buildShoppingList(
-    plan.map((rad) => ({ recipe: receptet(rad.recipe_id), servings: rad.servings })),
-    egnaRader(),
-    dolda,
-  );
+  const synliga = buildShoppingList(planposter(), egnaRader(), dolda);
 
   const märke = (post) => märken.get(groupKey(post.name, post.unit));
   const kvarDolda = [...dolda].filter(
@@ -446,6 +449,14 @@ async function taBortRader(post) {
   sparade = await client.rest(`shopping_list_items?select=*&household_id=eq.${household.id}`);
 }
 
+/**
+ * Lägger till en vara man skriver in själv.
+ *
+ * Går samma väg som knappen i receptvyn. Skrev den sin rad rakt in i tabellen
+ * hamnade en vara man just skrivit in direkt under "Redan inhandlat", om samma
+ * vara råkade vara avbockad sedan förra rundan – och mängden lades ihop med
+ * den man redan burit hem.
+ */
 async function läggTillEgen() {
   // Tolkas som en ingrediensrad, så att "2 dl grädde" blir mängd, enhet och
   // vara och kan slås ihop med planens grädde. Skriver man bara "kaffe" blir
@@ -453,17 +464,11 @@ async function läggTillEgen() {
   const tolkad = parseIngredient(els.newItem.value);
   if (!tolkad.name) return;
 
-  await client.rest('shopping_list_items?on_conflict=household_id,name,unit,source', {
-    method: 'POST',
-    body: {
-      household_id: household.id,
-      name: tolkad.name,
-      unit: tolkad.unit,
-      quantity: tolkad.quantity,
-      source: 'manual',
-    },
-    headers: { prefer: 'return=minimal,resolution=merge-duplicates' },
-  });
+  await applyToList(
+    client,
+    household.id,
+    addToList([tolkad], sparade, planGroups(planposter())),
+  );
 
   els.newItem.value = '';
   await ladda();
@@ -472,9 +477,14 @@ async function läggTillEgen() {
 /**
  * Rensar det som är inhandlat.
  *
- * Bockarna försvinner och de handtillagda rader som var avbockade raderas.
- * Planens rader står kvar – de kommer ur veckan och försvinner när rätten gör
- * det. Att rensa listan ska inte tyst ändra vad man tänkt laga.
+ * De handtillagda raderna raderas – de är handlade och hemburna, och kan
+ * försvinna. Kommer mängden ur veckoplanen går den inte att radera: den räknas
+ * fram på nytt vid varje visning, och en bock som bara togs bort lade tillbaka
+ * allt man nyss handlat bland det som ska handlas. Bocken byts därför mot ett
+ * bortplock, precis som när man lägger i en handlad vara på nytt.
+ *
+ * Veckoplanen rörs inte. Att rensa listan ska inte tyst ändra vad man tänkt
+ * laga, och ångrar man sig står varorna kvar under "Ta tillbaka".
  */
 async function rensaInhandlat() {
   if (!inhandlade.length) {
@@ -483,21 +493,34 @@ async function rensaInhandlat() {
   }
 
   const antal = inhandlade.length === 1 ? '1 inhandlad vara' : `${inhandlade.length} inhandlade varor`;
-  if (!confirm(`Rensa ${antal}? Veckoplanen rörs inte.`)) return;
+  if (!confirm(`Rensa ${antal}? Veckoplanen rörs inte, och det du handlat ber inte om sig igen.`)) return;
 
   setStatus('Rensar …');
   const bockade = sparade.filter((rad) => rad.source === 'plan' && rad.checked);
   const nycklar = new Set(bockade.map((rad) => groupKey(rad.name, rad.unit)));
-
-  await client.rest(
-    `shopping_list_items?household_id=eq.${household.id}&source=eq.plan&checked=is.true`,
-    { method: 'DELETE', headers: { prefer: 'return=minimal' } },
-  );
+  const planens = planGroups(planposter());
 
   for (const egen of egnaRader()) {
     if (!nycklar.has(groupKey(egen.name, egen.unit))) continue;
     await client.rest(`shopping_list_items?id=eq.${egen.id}`, {
       method: 'DELETE', headers: { prefer: 'return=minimal' },
+    });
+  }
+
+  const kvar = bockade.filter((rad) => planens.has(groupKey(rad.name, rad.unit)));
+  const bort = bockade.filter((rad) => !planens.has(groupKey(rad.name, rad.unit)));
+
+  if (bort.length) {
+    await client.rest(`shopping_list_items?id=in.(${bort.map((rad) => rad.id).join(',')})`, {
+      method: 'DELETE', headers: { prefer: 'return=minimal' },
+    });
+  }
+
+  if (kvar.length) {
+    await client.rest(`shopping_list_items?id=in.(${kvar.map((rad) => rad.id).join(',')})`, {
+      method: 'PATCH',
+      body: { checked: false, hidden: true },
+      headers: { prefer: 'return=minimal' },
     });
   }
 
